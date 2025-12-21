@@ -1,0 +1,199 @@
+{
+    "version": "1.1",
+    "description": "Skill activation triggers for Claude Code. Controls when skills automatically suggest or block actions.",
+    "skills": {
+        "python-backend": {
+            "type": "guardrail",
+            "enforcement": "block",
+            "priority": "critical",
+            "description": "Modern Python API development with FastAPI covering async patterns, Pydantic validation, dependency injection, and production deployment",
+            "promptTriggers": {
+                "keywords": [
+                    "fastapi",
+                    "backend",
+                    "api",
+                    "endpoint",
+                    "route",
+                    "router",
+                    "pydantic",
+                    "async",
+                    "await",
+                    "middleware",
+                    "dependency injection",
+                    "oauth2",
+                    "jwt",
+                    "authentication",
+                    "authorization",
+                    "uvicorn",
+                    "starlette",
+                    "rest",
+                    "restful",
+                    "microservice",
+                    "service",
+                    "controller",
+                    "validation",
+                    "schema",
+                    "database",
+                    "sqlalchemy",
+                    "alembic",
+                    "crud",
+                    "websocket"
+                ],
+                "intentPatterns": [
+                    "(create|build|add|implement|write).*?(api|endpoint|route|service|backend|microservice)",
+                    "(setup|configure|initialize).*?(fastapi|backend|api|server)",
+                    "(add|implement|create).*?(authentication|auth|oauth|jwt|login|signup)",
+                    "(connect|integrate|setup).*?(database|db|postgres|mysql|mongodb)",
+                    "(add|create|implement).*?(middleware|validation|error.*?handler|exception)",
+                    "(write|create|add).*?(pydantic.*?model|schema|validator)",
+                    "(implement|add|create).*?(dependency|injection|depends)",
+                    "(test|testing).*?(api|endpoint|fastapi|backend)",
+                    "(deploy|deployment|production).*?(fastapi|api|backend)",
+                    "(async|asynchronous).*?(endpoint|route|operation|function)",
+                    "(how.*?to|best.*?practice|pattern).*?(fastapi|backend|api)"
+                ]
+            },
+            "fileTriggers": {
+                "pathPatterns": [
+                    "**/main.py",
+                    "**/app.py",
+                    "**/api/**/*.py",
+                    "**/routers/**/*.py",
+                    "**/routes/**/*.py",
+                    "**/endpoints/**/*.py",
+                    "**/services/**/*.py",
+                    "**/schemas/**/*.py",
+                    "**/models/**/*.py",
+                    "**/dependencies/**/*.py",
+                    "**/auth/**/*.py",
+                    "**/middleware/**/*.py",
+                    "**/backend/**/*.py",
+                    "**/server/**/*.py"
+                ],
+                "contentPatterns": [
+                    "from fastapi import",
+                    "import fastapi",
+                    "FastAPI\\(",
+                    "APIRouter\\(",
+                    "@app\\.(get|post|put|delete|patch|options|head)",
+                    "@router\\.(get|post|put|delete|patch|options|head)",
+                    "class.*\\(BaseModel\\)",
+                    "Depends\\(",
+                    "OAuth2PasswordBearer",
+                    "HTTPException",
+                    "async def.*\\(",
+                    "uvicorn\\.run"
+                ]
+            },
+            "blockMessage": "🚫 REQUIRED: Python Backend Best Practices\n\nThe 'python-backend' skill MUST be loaded for FastAPI/backend development.\n\nThis skill provides:\n  • API structure and routing patterns\n  • Pydantic models and validation\n  • Authentication (OAuth2/JWT)\n  • Database integration\n  • Async/await patterns\n  • Testing and deployment\n\n📋 REQUIRED ACTION:\n  Use: /python-backend\n\n💡 To skip this check:\n  • Add '@skip-backend-skill' comment in your file\n  • Set SKIP_PYTHON_BACKEND_SKILL=1 environment variable",
+            "skipConditions": {
+                "sessionSkillUsed": true,
+                "fileMarkers": [
+                    "@skip-skill-validation",
+                    "@skip-backend-skill"
+                ],
+                "envOverride": "SKIP_PYTHON_BACKEND_SKILL"
+            }
+        },
+        "python": {
+            "type": "domain",
+            "enforcement": "suggestion",
+            "priority": "medium",
+            "description": "Python coding standards, best practices, type hints, and testing patterns",
+            "promptTriggers": {
+                "keywords": [
+                    "python",
+                    "type hint",
+                    "type annotation",
+                    "mypy",
+                    "pytest",
+                    "test",
+                    "testing",
+                    "uv",
+                    "pip",
+                    "poetry",
+                    "virtual environment",
+                    "venv",
+                    "package",
+                    "dependency",
+                    "install",
+                    "requirements",
+                    "pyproject",
+                    "setup.py",
+                    "typing",
+                    "async",
+                    "asyncio",
+                    "dataclass",
+                    "protocol",
+                    "abc",
+                    "enumerate",
+                    "comprehension",
+                    "generator",
+                    "decorator",
+                    "context manager",
+                    "exception handling",
+                    "logging"
+                ],
+                "intentPatterns": [
+                    "(write|create|implement).*?python.*?(code|script|function|class)",
+                    "(add|use|implement).*?(type.*?hint|annotation|typing)",
+                    "(write|create|add).*?(test|pytest|unit.*?test)",
+                    "(install|add|manage).*?(package|dependency|requirement)",
+                    "(setup|configure|create).*?(virtual.*?environment|venv|uv)",
+                    "(how.*?to|best.*?practice).*?python",
+                    "(fix|debug|solve).*?python.*?(error|exception|bug)",
+                    "(refactor|improve|optimize).*?python.*?code",
+                    "(write|create).*?(async|asynchronous).*?python"
+                ]
+            },
+            "fileTriggers": {
+                "pathPatterns": [
+                    "**/*.py",
+                    "**/pyproject.toml",
+                    "**/setup.py",
+                    "**/requirements*.txt",
+                    "**/.python-version",
+                    "**/tox.ini",
+                    "**/pytest.ini",
+                    "**/.mypy.ini"
+                ],
+                "contentPatterns": [
+                    "^def ",
+                    "^async def ",
+                    "^class ",
+                    "from typing import",
+                    "import typing",
+                    "@pytest\\.",
+                    "@dataclass",
+                    "^import ",
+                    "^from .* import"
+                ]
+            },
+            "suggestionMessage": "💡 Tip: The 'python' skill provides Python best practices including:\n  • Type hints and static typing\n  • Modern Python features\n  • Package management with uv\n  • Testing with pytest\n  • Code style and conventions",
+            "skipConditions": {
+                "sessionSkillUsed": true,
+                "fileMarkers": [
+                    "@skip-skill-validation",
+                    "@skip-python-skill"
+                ],
+                "envOverride": "SKIP_PYTHON_SKILL"
+            }
+        }
+    },
+    "metadata": {
+        "enforcement_types": {
+            "suggestion": "Skill suggestion appears but doesn't block execution",
+            "block": "Requires skill to be used before proceeding (guardrail)",
+            "warn": "Shows warning but allows proceeding"
+        },
+        "priority_levels": {
+            "critical": "Highest - Always trigger when matched",
+            "high": "Important - Trigger for most matches",
+            "medium": "Moderate - Trigger for clear matches",
+            "low": "Optional - Trigger only for explicit matches"
+        },
+        "customization": {
+            "note": "Adjust pathPatterns, keywords, and intentPatterns to match your project structure and domain"
+        }
+    }
+}
