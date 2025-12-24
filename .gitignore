@@ -55,10 +55,14 @@ logs/
 /uploads/
 /downloads/
 
-# Model cache
-models/
+# Model cache (downloaded model weights, not source code)
+*.pth
+*.safetensors
+*.bin
+*.onnx
 checkpoints/
 .cache/
+**/downloaded_models/
 
 # Feature store
 features/
