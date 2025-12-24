@@ -13,8 +13,11 @@ from fastapi.responses import JSONResponse
 
 from .config import get_settings
 from .models import registry
-from .routers import common_router
-from .schemas import ErrorResponse
+from .models.dinov3_service import DINOv3Service
+from .models.moondream_service import MoondreamService
+from .models.sam_service import SAMService
+from .routers import common_router, dinov3_router, moondream_router, sam_router
+from .schemas import ErrorResponse, ModelType
 
 # Configure logging
 logging.basicConfig(
@@ -39,6 +42,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info(f"Configured models: {settings.geoai_models}")
     logger.info(f"Device: {settings.device}")
     logger.info(f"Storage path: {settings.storage_path}")
+
+    # Register model services
+    registry.register_model_class(ModelType.SAM, SAMService)
+    registry.register_model_class(ModelType.MOONDREAM, MoondreamService)
+    registry.register_model_class(ModelType.DINOV3, DINOv3Service)
+    logger.info("Registered model services: SAM, Moondream, DINOv3")
 
     # Startup: Models are loaded lazily on first request
     logger.info("Application started successfully")
@@ -92,6 +101,18 @@ def create_app() -> FastAPI:
     # Include routers
     app.include_router(
         common_router,
+        prefix=settings.api_prefix,
+    )
+    app.include_router(
+        sam_router,
+        prefix=settings.api_prefix,
+    )
+    app.include_router(
+        moondream_router,
+        prefix=settings.api_prefix,
+    )
+    app.include_router(
+        dinov3_router,
         prefix=settings.api_prefix,
     )
 
