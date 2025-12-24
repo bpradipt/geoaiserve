@@ -192,12 +192,14 @@ uv run uvicorn geoaiserve.main:app --reload --log-level debug
 - [x] File upload/download service
 - [x] Error handling and logging
 
-### 🚧 Phase 2: Model Integration (In Progress)
+### ✅ Phase 2: Model Integration (Completed)
 
-- [ ] SAM endpoints (generate, predict)
-- [ ] Moondream endpoints (caption, query, detect)
-- [ ] DINOv3 endpoints (features, similarity)
-- [ ] Model service implementations
+- [x] SAM endpoints (generate, predict, batch)
+- [x] Moondream endpoints (caption, query, detect, point)
+- [x] DINOv3 endpoints (features, similarity, batch-similarity)
+- [x] Model service implementations
+- [x] Full request/response schemas
+- [x] Mock model fallbacks for testing
 
 ### 📋 Phase 3: Advanced Features (Planned)
 
