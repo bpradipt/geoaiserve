@@ -5,9 +5,10 @@ from __future__ import annotations
 import base64
 import logging
 import uuid
+from datetime import datetime, timedelta
 from io import BytesIO
 from pathlib import Path
-from typing import BinaryIO
+from typing import Any, BinaryIO
 
 import httpx
 import rasterio
@@ -277,6 +278,142 @@ class FileHandler:
             logger.info(f"Deleted file: {file_path}")
             return True
         return False
+
+    async def save_upload_with_id(
+        self,
+        file: UploadFile,
+        validate_image: bool = True
+    ) -> tuple[str, Path]:
+        """Save uploaded file to upload directory and return file_id.
+
+        Args:
+            file: Uploaded file
+            validate_image: Whether to validate as image file
+
+        Returns:
+            Tuple of (file_id, file_path)
+
+        Raises:
+            HTTPException: If file validation fails
+        """
+        # Validate content type
+        if validate_image and file.content_type not in self.settings.allowed_image_formats:
+            raise HTTPException(
+                status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                detail=f"Unsupported file type: {file.content_type}. "
+                       f"Allowed types: {self.settings.allowed_image_formats}"
+            )
+
+        # Generate unique filename
+        file_id = str(uuid.uuid4())
+        file_ext = Path(file.filename or "").suffix or ".tif"
+        file_path = self.settings.upload_dir / f"{file_id}{file_ext}"
+
+        # Read and validate file size
+        content = await file.read()
+        if len(content) > self.settings.max_upload_size:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"File too large. Max size: {self.settings.max_upload_size} bytes"
+            )
+
+        # Save file
+        try:
+            file_path.write_bytes(content)
+            logger.info(f"Saved uploaded file to {file_path} with id {file_id}")
+            return file_id, file_path
+        except Exception as e:
+            logger.error(f"Failed to save file: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to save file: {str(e)}"
+            )
+
+    def get_file_by_id(self, file_id: str) -> Path:
+        """Get file path by file_id.
+
+        Args:
+            file_id: UUID string identifying the file
+
+        Returns:
+            Path to the file
+
+        Raises:
+            HTTPException: If file not found
+        """
+        # Search for file with matching UUID prefix in upload directory
+        for file_path in self.settings.upload_dir.iterdir():
+            if file_path.is_file() and file_path.stem == file_id:
+                return file_path
+
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"File not found: {file_id}"
+        )
+
+    def get_file_info(self, file_id: str) -> dict[str, Any]:
+        """Get file metadata by file_id.
+
+        Args:
+            file_id: UUID string identifying the file
+
+        Returns:
+            Dictionary with file metadata
+        """
+        file_path = self.get_file_by_id(file_id)
+        stat = file_path.stat()
+
+        # Calculate expiration time
+        created_at = datetime.fromtimestamp(stat.st_ctime)
+        expires_at = created_at + timedelta(hours=self.settings.upload_ttl_hours)
+
+        return {
+            "file_id": file_id,
+            "filename": file_path.name,
+            "size": stat.st_size,
+            "content_type": self._get_media_type(file_path.suffix),
+            "created_at": created_at,
+            "expires_at": expires_at,
+            "path": str(file_path),
+        }
+
+    def list_files(self) -> list[dict[str, Any]]:
+        """List all uploaded files.
+
+        Returns:
+            List of file metadata dictionaries
+        """
+        files = []
+        for file_path in self.settings.upload_dir.iterdir():
+            if file_path.is_file():
+                stat = file_path.stat()
+                created_at = datetime.fromtimestamp(stat.st_ctime)
+                expires_at = created_at + timedelta(hours=self.settings.upload_ttl_hours)
+                files.append({
+                    "file_id": file_path.stem,
+                    "filename": file_path.name,
+                    "size": stat.st_size,
+                    "content_type": self._get_media_type(file_path.suffix),
+                    "created_at": created_at,
+                    "expires_at": expires_at,
+                    "path": str(file_path),
+                })
+        return files
+
+    def delete_file_by_id(self, file_id: str) -> bool:
+        """Delete file by file_id.
+
+        Args:
+            file_id: UUID string identifying the file
+
+        Returns:
+            True if deleted successfully
+
+        Raises:
+            HTTPException: If file not found
+        """
+        file_path = self.get_file_by_id(file_id)
+        return self.cleanup_file(file_path)
 
     def _get_media_type(self, extension: str) -> str:
         """Get media type for file extension.
