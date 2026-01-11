@@ -2,22 +2,20 @@
 
 from __future__ import annotations
 
-from io import BytesIO
-
 import pytest
 from fastapi.testclient import TestClient
 
 
-def test_sam_generate_endpoint(client: TestClient, sample_image: BytesIO) -> None:
+def test_sam_generate_endpoint(client: TestClient, uploaded_file_id: str) -> None:
     """Test SAM automatic mask generation endpoint.
 
     Args:
         client: FastAPI test client
-        sample_image: Sample test image
+        uploaded_file_id: File ID of uploaded test image
     """
     response = client.post(
         "/api/v1/sam/generate",
-        files={"file": ("test.png", sample_image, "image/png")},
+        json={"file_id": uploaded_file_id},
     )
 
     assert response.status_code == 200
@@ -41,7 +39,7 @@ def test_sam_generate_endpoint(client: TestClient, sample_image: BytesIO) -> Non
 )
 def test_sam_generate_with_params(
     client: TestClient,
-    sample_image: BytesIO,
+    uploaded_file_id: str,
     points_per_side: int,
     pred_iou_thresh: float,
 ) -> None:
@@ -49,17 +47,14 @@ def test_sam_generate_with_params(
 
     Args:
         client: FastAPI test client
-        sample_image: Sample test image
+        uploaded_file_id: File ID of uploaded test image
         points_per_side: Grid sampling density
         pred_iou_thresh: IoU threshold
     """
-    # Reset BytesIO position
-    sample_image.seek(0)
-
     response = client.post(
         "/api/v1/sam/generate",
-        files={"file": ("test.png", sample_image, "image/png")},
-        data={
+        json={
+            "file_id": uploaded_file_id,
             "points_per_side": points_per_side,
             "pred_iou_thresh": pred_iou_thresh,
         },
@@ -70,17 +65,17 @@ def test_sam_generate_with_params(
     assert data["status"] == "success"
 
 
-def test_sam_predict_with_points(client: TestClient, sample_image: BytesIO) -> None:
+def test_sam_predict_with_points(client: TestClient, uploaded_file_id: str) -> None:
     """Test SAM prompt-based prediction with point prompts.
 
     Args:
         client: FastAPI test client
-        sample_image: Sample test image
+        uploaded_file_id: File ID of uploaded test image
     """
     response = client.post(
         "/api/v1/sam/predict",
-        files={"file": ("test.png", sample_image, "image/png")},
         json={
+            "file_id": uploaded_file_id,
             "point_coords": [[50, 50], [75, 75]],
             "point_labels": [1, 1],
         },
@@ -94,17 +89,17 @@ def test_sam_predict_with_points(client: TestClient, sample_image: BytesIO) -> N
     assert "metadata" in data
 
 
-def test_sam_predict_with_boxes(client: TestClient, sample_image: BytesIO) -> None:
+def test_sam_predict_with_boxes(client: TestClient, uploaded_file_id: str) -> None:
     """Test SAM prediction with bounding box prompts.
 
     Args:
         client: FastAPI test client
-        sample_image: Sample test image
+        uploaded_file_id: File ID of uploaded test image
     """
     response = client.post(
         "/api/v1/sam/predict",
-        files={"file": ("test.png", sample_image, "image/png")},
         json={
+            "file_id": uploaded_file_id,
             "boxes": [[10, 10, 90, 90]],
         },
     )
@@ -114,16 +109,16 @@ def test_sam_predict_with_boxes(client: TestClient, sample_image: BytesIO) -> No
     assert data["status"] == "success"
 
 
-def test_sam_predict_without_prompts(client: TestClient, sample_image: BytesIO) -> None:
+def test_sam_predict_without_prompts(client: TestClient, uploaded_file_id: str) -> None:
     """Test SAM prediction fails without any prompts.
 
     Args:
         client: FastAPI test client
-        sample_image: Sample test image
+        uploaded_file_id: File ID of uploaded test image
     """
     response = client.post(
         "/api/v1/sam/predict",
-        files={"file": ("test.png", sample_image, "image/png")},
+        json={"file_id": uploaded_file_id},
     )
 
     # Should return 400 Bad Request
@@ -132,26 +127,37 @@ def test_sam_predict_without_prompts(client: TestClient, sample_image: BytesIO) 
     assert "detail" in data
 
 
-def test_sam_batch_processing(client: TestClient, sample_image: BytesIO) -> None:
+def test_sam_predict_without_file_id(client: TestClient) -> None:
+    """Test SAM prediction fails without file_id.
+
+    Args:
+        client: FastAPI test client
+    """
+    response = client.post(
+        "/api/v1/sam/predict",
+        json={
+            "point_coords": [[50, 50]],
+            "point_labels": [1],
+        },
+    )
+
+    # Should return 400 Bad Request
+    assert response.status_code == 400
+    data = response.json()
+    assert "detail" in data
+
+
+def test_sam_batch_processing(client: TestClient, uploaded_file_ids: list[str]) -> None:
     """Test SAM batch processing endpoint.
 
     Args:
         client: FastAPI test client
-        sample_image: Sample test image
+        uploaded_file_ids: List of file IDs for uploaded images
     """
-    # Create multiple file instances
-    sample_image.seek(0)
-    image1 = BytesIO(sample_image.read())
-    sample_image.seek(0)
-    image2 = BytesIO(sample_image.read())
-
     response = client.post(
         "/api/v1/sam/batch",
-        files=[
-            ("files", ("test1.png", image1, "image/png")),
-            ("files", ("test2.png", image2, "image/png")),
-        ],
         json={
+            "file_ids": uploaded_file_ids[:2],
             "batch_size": 4,
             "predict_params": {
                 "point_coords": [[50, 50]],

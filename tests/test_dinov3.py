@@ -2,22 +2,20 @@
 
 from __future__ import annotations
 
-from io import BytesIO
-
 import pytest
 from fastapi.testclient import TestClient
 
 
-def test_dinov3_extract_features(client: TestClient, sample_image: BytesIO) -> None:
+def test_dinov3_extract_features(client: TestClient, uploaded_file_id: str) -> None:
     """Test DINOv3 feature extraction endpoint.
 
     Args:
         client: FastAPI test client
-        sample_image: Sample test image
+        uploaded_file_id: File ID of uploaded test image
     """
     response = client.post(
         "/api/v1/dinov3/features",
-        files={"file": ("test.png", sample_image, "image/png")},
+        json={"file_id": uploaded_file_id},
     )
 
     assert response.status_code == 200
@@ -37,22 +35,22 @@ def test_dinov3_extract_features(client: TestClient, sample_image: BytesIO) -> N
 )
 def test_dinov3_features_with_patches(
     client: TestClient,
-    sample_image: BytesIO,
+    uploaded_file_id: str,
     return_patch_features: bool,
 ) -> None:
     """Test DINOv3 feature extraction with/without patch features.
 
     Args:
         client: FastAPI test client
-        sample_image: Sample test image
+        uploaded_file_id: File ID of uploaded test image
         return_patch_features: Whether to return patch features
     """
-    sample_image.seek(0)
-
     response = client.post(
         "/api/v1/dinov3/features",
-        files={"file": ("test.png", sample_image, "image/png")},
-        json={"return_patch_features": return_patch_features},
+        json={
+            "file_id": uploaded_file_id,
+            "return_patch_features": return_patch_features,
+        },
     )
 
     assert response.status_code == 200
@@ -65,17 +63,17 @@ def test_dinov3_features_with_patches(
         assert data.get("patch_features") is None
 
 
-def test_dinov3_similarity(client: TestClient, sample_image: BytesIO) -> None:
+def test_dinov3_similarity(client: TestClient, uploaded_file_id: str) -> None:
     """Test DINOv3 patch similarity computation.
 
     Args:
         client: FastAPI test client
-        sample_image: Sample test image
+        uploaded_file_id: File ID of uploaded test image
     """
     response = client.post(
         "/api/v1/dinov3/similarity",
-        files={"file": ("test.png", sample_image, "image/png")},
         json={
+            "file_id": uploaded_file_id,
             "query_points": [[50, 50], [75, 75]],
         },
     )
@@ -103,22 +101,22 @@ def test_dinov3_similarity(client: TestClient, sample_image: BytesIO) -> None:
 )
 def test_dinov3_similarity_multiple_points(
     client: TestClient,
-    sample_image: BytesIO,
+    uploaded_file_id: str,
     query_points: list[list[float]],
 ) -> None:
     """Test DINOv3 similarity with different numbers of query points.
 
     Args:
         client: FastAPI test client
-        sample_image: Sample test image
+        uploaded_file_id: File ID of uploaded test image
         query_points: List of query points
     """
-    sample_image.seek(0)
-
     response = client.post(
         "/api/v1/dinov3/similarity",
-        files={"file": ("test.png", sample_image, "image/png")},
-        json={"query_points": query_points},
+        json={
+            "file_id": uploaded_file_id,
+            "query_points": query_points,
+        },
     )
 
     assert response.status_code == 200
@@ -126,31 +124,20 @@ def test_dinov3_similarity_multiple_points(
     assert len(data["similarity_maps"]) == len(query_points)
 
 
-def test_dinov3_batch_similarity(client: TestClient, sample_image: BytesIO) -> None:
+def test_dinov3_batch_similarity(client: TestClient, uploaded_file_ids: list[str]) -> None:
     """Test DINOv3 batch similarity ranking.
 
     Args:
         client: FastAPI test client
-        sample_image: Sample test image
+        uploaded_file_ids: List of file IDs for uploaded images
     """
-    # Create multiple file instances
-    sample_image.seek(0)
-    query = BytesIO(sample_image.read())
-
-    sample_image.seek(0)
-    candidate1 = BytesIO(sample_image.read())
-
-    sample_image.seek(0)
-    candidate2 = BytesIO(sample_image.read())
-
     response = client.post(
         "/api/v1/dinov3/batch-similarity",
-        files=[
-            ("query_file", ("query.png", query, "image/png")),
-            ("candidate_files", ("cand1.png", candidate1, "image/png")),
-            ("candidate_files", ("cand2.png", candidate2, "image/png")),
-        ],
-        json={"top_k": 10},
+        json={
+            "query_file_id": uploaded_file_ids[0],
+            "candidate_file_ids": uploaded_file_ids[1:],
+            "top_k": 10,
+        },
     )
 
     assert response.status_code == 200
@@ -160,7 +147,7 @@ def test_dinov3_batch_similarity(client: TestClient, sample_image: BytesIO) -> N
     assert data["num_candidates"] == 2
     assert "similarities" in data
     assert isinstance(data["similarities"], list)
-    assert len(data["similarities"]) <= 10  # Respects top_k
+    assert len(data["similarities"]) <= 10
 
 
 @pytest.mark.parametrize(
@@ -169,34 +156,42 @@ def test_dinov3_batch_similarity(client: TestClient, sample_image: BytesIO) -> N
 )
 def test_dinov3_batch_similarity_top_k(
     client: TestClient,
-    sample_image: BytesIO,
+    uploaded_file_ids: list[str],
     top_k: int,
 ) -> None:
     """Test DINOv3 batch similarity with different top_k values.
 
     Args:
         client: FastAPI test client
-        sample_image: Sample test image
+        uploaded_file_ids: List of file IDs for uploaded images
         top_k: Number of top results to return
     """
-    sample_image.seek(0)
-    query = BytesIO(sample_image.read())
-
-    candidates = []
-    for _ in range(5):
-        sample_image.seek(0)
-        candidates.append(BytesIO(sample_image.read()))
-
-    files = [("query_file", ("query.png", query, "image/png"))]
-    for i, cand in enumerate(candidates):
-        files.append(("candidate_files", (f"cand{i}.png", cand, "image/png")))
-
     response = client.post(
         "/api/v1/dinov3/batch-similarity",
-        files=files,
-        json={"top_k": top_k},
+        json={
+            "query_file_id": uploaded_file_ids[0],
+            "candidate_file_ids": uploaded_file_ids[1:],
+            "top_k": top_k,
+        },
     )
 
     assert response.status_code == 200
     data = response.json()
     assert len(data["similarities"]) <= top_k
+
+
+def test_dinov3_features_without_file_id(client: TestClient) -> None:
+    """Test DINOv3 features fails without file_id.
+
+    Args:
+        client: FastAPI test client
+    """
+    response = client.post(
+        "/api/v1/dinov3/features",
+        json={"return_patch_features": True},
+    )
+
+    # Should return 400 Bad Request
+    assert response.status_code == 400
+    data = response.json()
+    assert "detail" in data

@@ -52,3 +52,44 @@ def sample_image_file(tmp_path: Path) -> Path:
     img_path = tmp_path / "test_image.png"
     img.save(img_path)
     return img_path
+
+
+@pytest.fixture
+def uploaded_file_id(client: TestClient, sample_image: BytesIO) -> str:
+    """Upload a sample image and return the file_id.
+
+    Args:
+        client: FastAPI test client
+        sample_image: Sample test image
+
+    Returns:
+        file_id string for the uploaded image
+    """
+    sample_image.seek(0)
+    response = client.post(
+        "/api/v1/files/upload",
+        files={"file": ("test.png", sample_image, "image/png")},
+    )
+    return response.json()["file_id"]
+
+
+@pytest.fixture
+def uploaded_file_ids(client: TestClient, sample_image: BytesIO) -> list[str]:
+    """Upload multiple sample images and return file_ids.
+
+    Args:
+        client: FastAPI test client
+        sample_image: Sample test image
+
+    Returns:
+        List of file_id strings for uploaded images
+    """
+    file_ids = []
+    for i in range(3):
+        sample_image.seek(0)
+        response = client.post(
+            "/api/v1/files/upload",
+            files={"file": (f"test_{i}.png", sample_image, "image/png")},
+        )
+        file_ids.append(response.json()["file_id"])
+    return file_ids

@@ -2,22 +2,20 @@
 
 from __future__ import annotations
 
-from io import BytesIO
-
 import pytest
 from fastapi.testclient import TestClient
 
 
-def test_moondream_caption(client: TestClient, sample_image: BytesIO) -> None:
+def test_moondream_caption(client: TestClient, uploaded_file_id: str) -> None:
     """Test Moondream image captioning endpoint.
 
     Args:
         client: FastAPI test client
-        sample_image: Sample test image
+        uploaded_file_id: File ID of uploaded test image
     """
     response = client.post(
         "/api/v1/moondream/caption",
-        files={"file": ("test.png", sample_image, "image/png")},
+        json={"file_id": uploaded_file_id},
     )
 
     assert response.status_code == 200
@@ -37,22 +35,22 @@ def test_moondream_caption(client: TestClient, sample_image: BytesIO) -> None:
 )
 def test_moondream_caption_lengths(
     client: TestClient,
-    sample_image: BytesIO,
+    uploaded_file_id: str,
     length: str,
 ) -> None:
     """Test Moondream captioning with different lengths.
 
     Args:
         client: FastAPI test client
-        sample_image: Sample test image
+        uploaded_file_id: File ID of uploaded test image
         length: Caption length parameter
     """
-    sample_image.seek(0)
-
     response = client.post(
         "/api/v1/moondream/caption",
-        files={"file": ("test.png", sample_image, "image/png")},
-        data={"length": length},
+        json={
+            "file_id": uploaded_file_id,
+            "length": length,
+        },
     )
 
     assert response.status_code == 200
@@ -60,17 +58,19 @@ def test_moondream_caption_lengths(
     assert data["length"] == length
 
 
-def test_moondream_query(client: TestClient, sample_image: BytesIO) -> None:
+def test_moondream_query(client: TestClient, uploaded_file_id: str) -> None:
     """Test Moondream visual question answering.
 
     Args:
         client: FastAPI test client
-        sample_image: Sample test image
+        uploaded_file_id: File ID of uploaded test image
     """
     response = client.post(
         "/api/v1/moondream/query",
-        files={"file": ("test.png", sample_image, "image/png")},
-        json={"question": "What color is the image?"},
+        json={
+            "file_id": uploaded_file_id,
+            "question": "What color is the image?",
+        },
     )
 
     assert response.status_code == 200
@@ -93,22 +93,22 @@ def test_moondream_query(client: TestClient, sample_image: BytesIO) -> None:
 )
 def test_moondream_query_variations(
     client: TestClient,
-    sample_image: BytesIO,
+    uploaded_file_id: str,
     question: str,
 ) -> None:
     """Test Moondream VQA with different questions.
 
     Args:
         client: FastAPI test client
-        sample_image: Sample test image
+        uploaded_file_id: File ID of uploaded test image
         question: Question to ask
     """
-    sample_image.seek(0)
-
     response = client.post(
         "/api/v1/moondream/query",
-        files={"file": ("test.png", sample_image, "image/png")},
-        json={"question": question},
+        json={
+            "file_id": uploaded_file_id,
+            "question": question,
+        },
     )
 
     assert response.status_code == 200
@@ -116,17 +116,19 @@ def test_moondream_query_variations(
     assert data["question"] == question
 
 
-def test_moondream_detect(client: TestClient, sample_image: BytesIO) -> None:
+def test_moondream_detect(client: TestClient, uploaded_file_id: str) -> None:
     """Test Moondream object detection endpoint.
 
     Args:
         client: FastAPI test client
-        sample_image: Sample test image
+        uploaded_file_id: File ID of uploaded test image
     """
     response = client.post(
         "/api/v1/moondream/detect",
-        files={"file": ("test.png", sample_image, "image/png")},
-        json={"object_type": "car"},
+        json={
+            "file_id": uploaded_file_id,
+            "object_type": "car",
+        },
     )
 
     assert response.status_code == 200
@@ -139,17 +141,19 @@ def test_moondream_detect(client: TestClient, sample_image: BytesIO) -> None:
     assert isinstance(data["detections"], list)
 
 
-def test_moondream_point(client: TestClient, sample_image: BytesIO) -> None:
+def test_moondream_point(client: TestClient, uploaded_file_id: str) -> None:
     """Test Moondream point detection endpoint.
 
     Args:
         client: FastAPI test client
-        sample_image: Sample test image
+        uploaded_file_id: File ID of uploaded test image
     """
     response = client.post(
         "/api/v1/moondream/point",
-        files={"file": ("test.png", sample_image, "image/png")},
-        json={"object_description": "the center"},
+        json={
+            "file_id": uploaded_file_id,
+            "object_description": "the center",
+        },
     )
 
     assert response.status_code == 200
@@ -160,3 +164,20 @@ def test_moondream_point(client: TestClient, sample_image: BytesIO) -> None:
     assert "points" in data
     assert "num_points" in data
     assert isinstance(data["points"], list)
+
+
+def test_moondream_caption_without_file_id(client: TestClient) -> None:
+    """Test Moondream caption fails without file_id.
+
+    Args:
+        client: FastAPI test client
+    """
+    response = client.post(
+        "/api/v1/moondream/caption",
+        json={"length": "normal"},
+    )
+
+    # Should return 400 Bad Request
+    assert response.status_code == 400
+    data = response.json()
+    assert "detail" in data
