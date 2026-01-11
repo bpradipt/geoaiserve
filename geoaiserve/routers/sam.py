@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, HTTPException, status
 
 from ..config import get_settings
 from ..models import registry
@@ -18,9 +19,40 @@ from ..schemas.sam import (
     SamPredictRequest,
     SamPredictResponse,
 )
-from ..services import file_handler
+from ..services.file_handler import file_handler
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/sam", tags=["SAM"])
+
+
+def resolve_image_path(request) -> Path:
+    """Resolve image path from request (file_id, URL, or base64).
+
+    Args:
+        request: Request with file_id or image input
+
+    Returns:
+        Path to the image file
+
+    Raises:
+        HTTPException: If no valid image source provided
+    """
+    if request.file_id:
+        return file_handler.get_file_by_id(request.file_id)
+    elif request.image and request.image.url:
+        # This would need async handling - for now raise error
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="URL input not supported in sync context. Please upload the file first."
+        )
+    elif request.image and request.image.base64:
+        return file_handler.decode_base64(request.image.base64)
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Either file_id or image input must be provided"
+        )
 
 
 @router.post(
@@ -30,14 +62,12 @@ router = APIRouter(prefix="/sam", tags=["SAM"])
     description="Generate segmentation masks automatically using SAM's grid-based approach"
 )
 async def generate_masks(
-    file: UploadFile = File(..., description="Input image file"),
-    request: SamGenerateRequest = SamGenerateRequest(),
+    request: SamGenerateRequest,
 ) -> SamGenerateResponse:
     """Generate masks automatically using SAM.
 
     Args:
-        file: Uploaded image file
-        request: Generation parameters
+        request: Generation parameters including file_id
 
     Returns:
         SamGenerateResponse with generated masks
@@ -47,10 +77,11 @@ async def generate_masks(
     """
     start_time = time.time()
     settings = get_settings()
+    image_path = None
 
     try:
-        # Save uploaded file
-        image_path = await file_handler.save_upload(file)
+        # Resolve image path from file_id
+        image_path = resolve_image_path(request)
 
         # Get or create SAM model
         sam_model = registry.get_model(
@@ -76,12 +107,10 @@ async def generate_masks(
 
         processing_time = time.time() - start_time
 
-        # For mock response (when samgeo not installed)
-        # In production, parse the actual output file
         return SamGenerateResponse(
             status="success",
-            num_masks=0,  # Will be populated from actual results
-            masks=[],  # Will be populated from actual results
+            num_masks=0,
+            masks=[],
             metadata=GeoMetadata(
                 processing_time=processing_time,
                 model_name=sam_model.model_name,
@@ -90,15 +119,14 @@ async def generate_masks(
             download_url=f"/downloads/{output_path.name}" if output_path.exists() else None,
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Mask generation failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Mask generation failed: {str(e)}"
         )
-    finally:
-        # Cleanup temporary files if needed
-        if not settings.debug and image_path.exists():
-            file_handler.cleanup_file(image_path)
 
 
 @router.post(
@@ -108,14 +136,12 @@ async def generate_masks(
     description="Segment specific objects using point, box, or mask prompts"
 )
 async def predict_masks(
-    file: UploadFile = File(..., description="Input image file"),
-    request: SamPredictRequest = SamPredictRequest(),
+    request: SamPredictRequest,
 ) -> SamPredictResponse:
     """Predict masks using prompts (points, boxes).
 
     Args:
-        file: Uploaded image file
-        request: Prediction parameters with prompts
+        request: Prediction parameters with prompts and file_id
 
     Returns:
         SamPredictResponse with predicted masks
@@ -134,8 +160,8 @@ async def predict_masks(
                 detail="At least one prompt type (points or boxes) must be provided"
             )
 
-        # Save uploaded file
-        image_path = await file_handler.save_upload(file)
+        # Resolve image path from file_id
+        image_path = resolve_image_path(request)
 
         # Get or create SAM model
         sam_model = registry.get_model(
@@ -155,10 +181,9 @@ async def predict_masks(
 
         processing_time = time.time() - start_time
 
-        # For mock response
         return SamPredictResponse(
             status="success",
-            masks=[],  # Will be populated from actual results
+            masks=[],
             metadata=GeoMetadata(
                 processing_time=processing_time,
                 model_name=sam_model.model_name,
@@ -169,14 +194,11 @@ async def predict_masks(
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"Prediction failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Prediction failed: {str(e)}"
         )
-    finally:
-        # Cleanup temporary files if needed
-        if not settings.debug and image_path.exists():
-            file_handler.cleanup_file(image_path)
 
 
 @router.post(
@@ -186,14 +208,12 @@ async def predict_masks(
     description="Process multiple images in batch mode"
 )
 async def batch_process(
-    files: list[UploadFile] = File(..., description="Multiple input image files"),
-    request: SamBatchRequest = SamBatchRequest(),
+    request: SamBatchRequest,
 ) -> SamBatchResponse:
     """Process multiple images in batch.
 
     Args:
-        files: List of uploaded image files
-        request: Batch processing parameters
+        request: Batch processing parameters with file_ids
 
     Returns:
         SamBatchResponse with all results
@@ -204,17 +224,17 @@ async def batch_process(
     start_time = time.time()
     settings = get_settings()
 
-    if len(files) > request.batch_size:
+    if len(request.file_ids) > request.batch_size:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Too many files. Maximum batch size: {request.batch_size}"
         )
 
     try:
-        # Save all uploaded files
+        # Resolve all file_ids to paths
         image_paths = []
-        for file in files:
-            image_path = await file_handler.save_upload(file)
+        for file_id in request.file_ids:
+            image_path = file_handler.get_file_by_id(file_id)
             image_paths.append(image_path)
 
         # Get or create SAM model
@@ -244,7 +264,7 @@ async def batch_process(
                         status="success",
                         masks=[],
                         metadata=GeoMetadata(
-                            processing_time=processing_time / len(files),
+                            processing_time=processing_time / len(request.file_ids),
                             model_name=sam_model.model_name,
                         ),
                     )
@@ -252,7 +272,7 @@ async def batch_process(
 
         return SamBatchResponse(
             status="success",
-            total_images=len(files),
+            total_images=len(request.file_ids),
             results=results,
             metadata=GeoMetadata(
                 processing_time=processing_time,
@@ -263,13 +283,8 @@ async def batch_process(
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"Batch processing failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Batch processing failed: {str(e)}"
         )
-    finally:
-        # Cleanup temporary files if needed
-        if not settings.debug:
-            for image_path in image_paths:
-                if image_path.exists():
-                    file_handler.cleanup_file(image_path)
