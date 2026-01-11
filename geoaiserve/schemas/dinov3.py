@@ -30,6 +30,15 @@ class DINOv3SimilarityRequest(BaseInferenceRequest):
 class DINOv3BatchSimilarityRequest(BaseModel):
     """Request for batch similarity computation."""
 
+    query_file_id: str = Field(
+        ...,
+        description="File ID of the query image"
+    )
+    candidate_file_ids: list[str] = Field(
+        ...,
+        min_length=1,
+        description="List of file IDs for candidate images"
+    )
     model_params: dict = Field(
         default_factory=dict,
         description="Model configuration"

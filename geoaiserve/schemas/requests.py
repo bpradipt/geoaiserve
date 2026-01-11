@@ -25,9 +25,13 @@ class ImageInput(BaseModel):
 class BaseInferenceRequest(BaseModel):
     """Base request for model inference."""
 
+    file_id: str | None = Field(
+        None,
+        description="File ID from upload endpoint (preferred method)"
+    )
     image: ImageInput | None = Field(
         None,
-        description="Image input configuration (alternative to file upload)"
+        description="Image input configuration (alternative to file_id)"
     )
     model_params: ModelConfig = Field(
         default_factory=ModelConfig,

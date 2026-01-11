@@ -70,6 +70,11 @@ class SamPredictRequest(BaseInferenceRequest):
 class SamBatchRequest(BaseModel):
     """Request for batch SAM processing."""
 
+    file_ids: list[str] = Field(
+        ...,
+        min_length=1,
+        description="List of file IDs to process"
+    )
     batch_size: int = Field(
         default=4,
         ge=1,
