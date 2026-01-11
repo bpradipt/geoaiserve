@@ -16,6 +16,12 @@ from .common import (
     OutputConfig,
     OutputFormat,
 )
+from .files import (
+    FileDeleteResponse,
+    FileInfo,
+    FileListResponse,
+    UploadResponse,
+)
 from .requests import BaseInferenceRequest, ImageInput
 from .responses import *
 
@@ -23,6 +29,9 @@ __all__ = [
     "BaseInferenceRequest",
     "DeviceType",
     "ErrorResponse",
+    "FileDeleteResponse",
+    "FileInfo",
+    "FileListResponse",
     "GeoMetadata",
     "GeoResponse",
     "HealthResponse",
@@ -36,4 +45,5 @@ __all__ = [
     "ModelsListResponse",
     "OutputConfig",
     "OutputFormat",
+    "UploadResponse",
 ]

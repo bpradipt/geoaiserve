@@ -58,6 +58,8 @@ class Settings(BaseSettings):
     gcs_bucket: str | None = None
 
     # File Upload Configuration
+    upload_dir: Path = Path("/tmp/geoaiserve/uploads")
+    upload_ttl_hours: int = Field(default=24, ge=1, description="Hours before uploaded files are cleaned up")
     max_upload_size: int = 100 * 1024 * 1024  # 100 MB
     allowed_image_formats: list[str] = Field(
         default_factory=lambda: [
@@ -99,6 +101,7 @@ class Settings(BaseSettings):
         super().__init__(**kwargs)
         self.storage_path.mkdir(parents=True, exist_ok=True)
         self.feature_store_path.mkdir(parents=True, exist_ok=True)
+        self.upload_dir.mkdir(parents=True, exist_ok=True)
 
 
 @lru_cache
