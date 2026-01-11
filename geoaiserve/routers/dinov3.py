@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 import time
+from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, HTTPException, status
 
 from ..config import get_settings
 from ..models import registry
@@ -17,9 +19,39 @@ from ..schemas.dinov3 import (
     DINOv3SimilarityRequest,
     DINOv3SimilarityResponse,
 )
-from ..services import file_handler
+from ..services.file_handler import file_handler
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/dinov3", tags=["DINOv3"])
+
+
+def resolve_image_path(request) -> Path:
+    """Resolve image path from request (file_id, URL, or base64).
+
+    Args:
+        request: Request with file_id or image input
+
+    Returns:
+        Path to the image file
+
+    Raises:
+        HTTPException: If no valid image source provided
+    """
+    if request.file_id:
+        return file_handler.get_file_by_id(request.file_id)
+    elif request.image and request.image.url:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="URL input not supported in sync context. Please upload the file first."
+        )
+    elif request.image and request.image.base64:
+        return file_handler.decode_base64(request.image.base64)
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Either file_id or image input must be provided"
+        )
 
 
 @router.post(
@@ -29,14 +61,12 @@ router = APIRouter(prefix="/dinov3", tags=["DINOv3"])
     description="Extract dense features from images using DINOv3"
 )
 async def extract_features(
-    file: UploadFile = File(..., description="Input image file"),
-    request: DINOv3FeaturesRequest = DINOv3FeaturesRequest(),
+    request: DINOv3FeaturesRequest,
 ) -> DINOv3FeaturesResponse:
     """Extract features from an image using DINOv3.
 
     Args:
-        file: Uploaded image file
-        request: Feature extraction parameters
+        request: Feature extraction parameters including file_id
 
     Returns:
         DINOv3FeaturesResponse with extracted features
@@ -48,8 +78,8 @@ async def extract_features(
     settings = get_settings()
 
     try:
-        # Save uploaded file
-        image_path = await file_handler.save_upload(file)
+        # Resolve image path from file_id
+        image_path = resolve_image_path(request)
 
         # Get or create DINOv3 model
         dinov3_model = registry.get_model(
@@ -77,15 +107,14 @@ async def extract_features(
             ),
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Feature extraction failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Feature extraction failed: {str(e)}"
         )
-    finally:
-        # Cleanup temporary files if needed
-        if not settings.debug and image_path.exists():
-            file_handler.cleanup_file(image_path)
 
 
 @router.post(
@@ -95,14 +124,12 @@ async def extract_features(
     description="Compute patch-level similarity heatmaps for query points"
 )
 async def compute_similarity(
-    file: UploadFile = File(..., description="Input image file"),
-    request: DINOv3SimilarityRequest = DINOv3SimilarityRequest(query_points=[[100, 100]]),
+    request: DINOv3SimilarityRequest,
 ) -> DINOv3SimilarityResponse:
     """Compute patch similarity for query points using DINOv3.
 
     Args:
-        file: Uploaded image file
-        request: Similarity computation parameters
+        request: Similarity computation parameters including file_id
 
     Returns:
         DINOv3SimilarityResponse with similarity maps
@@ -114,8 +141,8 @@ async def compute_similarity(
     settings = get_settings()
 
     try:
-        # Save uploaded file
-        image_path = await file_handler.save_upload(file)
+        # Resolve image path from file_id
+        image_path = resolve_image_path(request)
 
         # Get or create DINOv3 model
         dinov3_model = registry.get_model(
@@ -143,15 +170,14 @@ async def compute_similarity(
             ),
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Similarity computation failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Similarity computation failed: {str(e)}"
         )
-    finally:
-        # Cleanup temporary files if needed
-        if not settings.debug and image_path.exists():
-            file_handler.cleanup_file(image_path)
 
 
 @router.post(
@@ -161,16 +187,12 @@ async def compute_similarity(
     description="Find most similar images from a batch of candidates"
 )
 async def batch_similarity(
-    query_file: UploadFile = File(..., description="Query image file"),
-    candidate_files: list[UploadFile] = File(..., description="Candidate image files"),
-    request: DINOv3BatchSimilarityRequest = DINOv3BatchSimilarityRequest(),
+    request: DINOv3BatchSimilarityRequest,
 ) -> DINOv3BatchSimilarityResponse:
     """Compute similarity between query and multiple candidate images.
 
     Args:
-        query_file: Query image file
-        candidate_files: List of candidate image files
-        request: Batch similarity parameters
+        request: Batch similarity parameters with query_file_id and candidate_file_ids
 
     Returns:
         DINOv3BatchSimilarityResponse with ranked similarities
@@ -182,13 +204,13 @@ async def batch_similarity(
     settings = get_settings()
 
     try:
-        # Save query image
-        query_path = await file_handler.save_upload(query_file)
+        # Resolve query image path
+        query_path = file_handler.get_file_by_id(request.query_file_id)
 
-        # Save candidate images
+        # Resolve candidate image paths
         candidate_paths = []
-        for candidate_file in candidate_files:
-            candidate_path = await file_handler.save_upload(candidate_file)
+        for file_id in request.candidate_file_ids:
+            candidate_path = file_handler.get_file_by_id(file_id)
             candidate_paths.append(candidate_path)
 
         # Get or create DINOv3 model
@@ -219,16 +241,11 @@ async def batch_similarity(
             ),
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Batch similarity failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Batch similarity failed: {str(e)}"
         )
-    finally:
-        # Cleanup temporary files if needed
-        if not settings.debug:
-            if query_path.exists():
-                file_handler.cleanup_file(query_path)
-            for candidate_path in candidate_paths:
-                if candidate_path.exists():
-                    file_handler.cleanup_file(candidate_path)
