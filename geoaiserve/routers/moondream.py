@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 import time
+from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, HTTPException, status
 
 from ..config import get_settings
 from ..models import registry
@@ -21,9 +23,39 @@ from ..schemas.moondream import (
     MoondreamQueryResponse,
     PointResult,
 )
-from ..services import file_handler
+from ..services.file_handler import file_handler
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/moondream", tags=["Moondream"])
+
+
+def resolve_image_path(request) -> Path:
+    """Resolve image path from request (file_id, URL, or base64).
+
+    Args:
+        request: Request with file_id or image input
+
+    Returns:
+        Path to the image file
+
+    Raises:
+        HTTPException: If no valid image source provided
+    """
+    if request.file_id:
+        return file_handler.get_file_by_id(request.file_id)
+    elif request.image and request.image.url:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="URL input not supported in sync context. Please upload the file first."
+        )
+    elif request.image and request.image.base64:
+        return file_handler.decode_base64(request.image.base64)
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Either file_id or image input must be provided"
+        )
 
 
 @router.post(
@@ -33,14 +65,12 @@ router = APIRouter(prefix="/moondream", tags=["Moondream"])
     description="Generate descriptive captions for images"
 )
 async def generate_caption(
-    file: UploadFile = File(..., description="Input image file"),
-    request: MoondreamCaptionRequest = MoondreamCaptionRequest(),
+    request: MoondreamCaptionRequest,
 ) -> MoondreamCaptionResponse:
     """Generate image caption using Moondream.
 
     Args:
-        file: Uploaded image file
-        request: Caption generation parameters
+        request: Caption generation parameters including file_id
 
     Returns:
         MoondreamCaptionResponse with generated caption
@@ -52,8 +82,8 @@ async def generate_caption(
     settings = get_settings()
 
     try:
-        # Save uploaded file
-        image_path = await file_handler.save_upload(file)
+        # Resolve image path from file_id
+        image_path = resolve_image_path(request)
 
         # Get or create Moondream model
         moondream_model = registry.get_model(
@@ -80,15 +110,14 @@ async def generate_caption(
             ),
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Caption generation failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Caption generation failed: {str(e)}"
         )
-    finally:
-        # Cleanup temporary files if needed
-        if not settings.debug and image_path.exists():
-            file_handler.cleanup_file(image_path)
 
 
 @router.post(
@@ -98,14 +127,12 @@ async def generate_caption(
     description="Ask questions about images and get answers"
 )
 async def answer_question(
-    file: UploadFile = File(..., description="Input image file"),
-    request: MoondreamQueryRequest = MoondreamQueryRequest(question="What is in this image?"),
+    request: MoondreamQueryRequest,
 ) -> MoondreamQueryResponse:
     """Answer questions about an image using Moondream.
 
     Args:
-        file: Uploaded image file
-        request: Question and parameters
+        request: Question and parameters including file_id
 
     Returns:
         MoondreamQueryResponse with answer
@@ -117,8 +144,8 @@ async def answer_question(
     settings = get_settings()
 
     try:
-        # Save uploaded file
-        image_path = await file_handler.save_upload(file)
+        # Resolve image path from file_id
+        image_path = resolve_image_path(request)
 
         # Get or create Moondream model
         moondream_model = registry.get_model(
@@ -145,15 +172,14 @@ async def answer_question(
             ),
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Visual QA failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Visual QA failed: {str(e)}"
         )
-    finally:
-        # Cleanup temporary files if needed
-        if not settings.debug and image_path.exists():
-            file_handler.cleanup_file(image_path)
 
 
 @router.post(
@@ -163,14 +189,12 @@ async def answer_question(
     description="Detect specific types of objects in images"
 )
 async def detect_objects(
-    file: UploadFile = File(..., description="Input image file"),
-    request: MoondreamDetectRequest = MoondreamDetectRequest(object_type="car"),
+    request: MoondreamDetectRequest,
 ) -> MoondreamDetectResponse:
     """Detect objects in an image using Moondream.
 
     Args:
-        file: Uploaded image file
-        request: Detection parameters
+        request: Detection parameters including file_id
 
     Returns:
         MoondreamDetectResponse with detected objects
@@ -182,8 +206,8 @@ async def detect_objects(
     settings = get_settings()
 
     try:
-        # Save uploaded file
-        image_path = await file_handler.save_upload(file)
+        # Resolve image path from file_id
+        image_path = resolve_image_path(request)
 
         # Get or create Moondream model
         moondream_model = registry.get_model(
@@ -206,7 +230,7 @@ async def detect_objects(
             detections.append(
                 DetectionResult(
                     label=obj.get("label", request.object_type),
-                    confidence=1.0,  # Mock confidence
+                    confidence=1.0,
                     bbox=obj.get("bbox", [0, 0, 0, 0]),
                 )
             )
@@ -222,15 +246,14 @@ async def detect_objects(
             ),
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Object detection failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Object detection failed: {str(e)}"
         )
-    finally:
-        # Cleanup temporary files if needed
-        if not settings.debug and image_path.exists():
-            file_handler.cleanup_file(image_path)
 
 
 @router.post(
@@ -240,14 +263,12 @@ async def detect_objects(
     description="Find and point to specific objects in images"
 )
 async def point_to_objects(
-    file: UploadFile = File(..., description="Input image file"),
-    request: MoondreamPointRequest = MoondreamPointRequest(object_description="the main subject"),
+    request: MoondreamPointRequest,
 ) -> MoondreamPointResponse:
     """Point to objects in an image using Moondream.
 
     Args:
-        file: Uploaded image file
-        request: Point detection parameters
+        request: Point detection parameters including file_id
 
     Returns:
         MoondreamPointResponse with point coordinates
@@ -259,8 +280,8 @@ async def point_to_objects(
     settings = get_settings()
 
     try:
-        # Save uploaded file
-        image_path = await file_handler.save_upload(file)
+        # Resolve image path from file_id
+        image_path = resolve_image_path(request)
 
         # Get or create Moondream model
         moondream_model = registry.get_model(
@@ -284,7 +305,7 @@ async def point_to_objects(
                 PointResult(
                     x=pt[0],
                     y=pt[1],
-                    confidence=1.0,  # Mock confidence
+                    confidence=1.0,
                 )
             )
 
@@ -299,12 +320,11 @@ async def point_to_objects(
             ),
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Point detection failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Point detection failed: {str(e)}"
         )
-    finally:
-        # Cleanup temporary files if needed
-        if not settings.debug and image_path.exists():
-            file_handler.cleanup_file(image_path)
