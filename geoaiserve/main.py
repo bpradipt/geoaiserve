@@ -16,7 +16,7 @@ from .models import registry
 from .models.dinov3_service import DINOv3Service
 from .models.moondream_service import MoondreamService
 from .models.sam_service import SAMService
-from .routers import common_router, dinov3_router, moondream_router, sam_router
+from .routers import common_router, dinov3_router, files_router, moondream_router, sam_router
 from .schemas import ErrorResponse, ModelType
 
 # Configure logging
@@ -101,6 +101,10 @@ def create_app() -> FastAPI:
     # Include routers
     app.include_router(
         common_router,
+        prefix=settings.api_prefix,
+    )
+    app.include_router(
+        files_router,
         prefix=settings.api_prefix,
     )
     app.include_router(
