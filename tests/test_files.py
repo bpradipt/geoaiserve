@@ -178,3 +178,94 @@ def test_multiple_uploads(client: TestClient, sample_image: BytesIO) -> None:
     listed_ids = [f["file_id"] for f in response.json()["files"]]
     for file_id in file_ids:
         assert file_id in listed_ids
+
+
+def test_delete_nonexistent_file(client: TestClient) -> None:
+    """Test deleting a non-existent file returns 404."""
+    response = client.delete("/api/v1/files/nonexistent-uuid-12345")
+    assert response.status_code == 404
+
+
+def test_upload_empty_file(client: TestClient) -> None:
+    """Test uploading an empty file.
+
+    Note: Currently the server accepts empty files. This test documents
+    that behavior. If validation is added later, update this test.
+    """
+    empty_content = BytesIO(b"")
+
+    response = client.post(
+        "/api/v1/files/upload",
+        files={"file": ("empty.png", empty_content, "image/png")},
+    )
+
+    # Currently accepts empty files - update if validation is added
+    assert response.status_code == 200
+    data = response.json()
+    assert data["size"] == 0
+
+
+def test_upload_corrupted_image(client: TestClient, corrupted_image_bytes: BytesIO) -> None:
+    """Test uploading corrupted image data is handled.
+
+    Args:
+        client: FastAPI test client
+        corrupted_image_bytes: Invalid image bytes fixture
+    """
+    response = client.post(
+        "/api/v1/files/upload",
+        files={"file": ("bad.png", corrupted_image_bytes, "image/png")},
+    )
+
+    # Corrupted images should be rejected or handled gracefully
+    # Accept either 400/415/422 for validation error, or 200 if server accepts raw bytes
+    assert response.status_code in [200, 400, 415, 422]
+
+
+def test_upload_special_characters_filename(client: TestClient, sample_image: BytesIO) -> None:
+    """Test uploading file with special characters in filename."""
+    sample_image.seek(0)
+    response = client.post(
+        "/api/v1/files/upload",
+        files={"file": ("tëst_ímàgé_日本語.png", sample_image, "image/png")},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "file_id" in data
+
+
+def test_upload_small_image(client: TestClient, sample_image_small: BytesIO) -> None:
+    """Test uploading a 1x1 pixel image.
+
+    Args:
+        client: FastAPI test client
+        sample_image_small: 1x1 pixel image fixture
+    """
+    response = client.post(
+        "/api/v1/files/upload",
+        files={"file": ("tiny.png", sample_image_small, "image/png")},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "file_id" in data
+    assert data["size"] > 0
+
+
+def test_upload_large_image(client: TestClient, sample_image_large: BytesIO) -> None:
+    """Test uploading a larger image.
+
+    Args:
+        client: FastAPI test client
+        sample_image_large: 500x500 pixel image fixture
+    """
+    response = client.post(
+        "/api/v1/files/upload",
+        files={"file": ("large.png", sample_image_large, "image/png")},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "file_id" in data
+    assert data["size"] > 0
