@@ -93,3 +93,51 @@ def uploaded_file_ids(client: TestClient, sample_image: BytesIO) -> list[str]:
         )
         file_ids.append(response.json()["file_id"])
     return file_ids
+
+
+@pytest.fixture
+def invalid_file_id() -> str:
+    """Return a non-existent file ID for error testing.
+
+    Returns:
+        A fake UUID that doesn't exist in the system
+    """
+    return "nonexistent-uuid-12345-abcdef"
+
+
+@pytest.fixture
+def sample_image_small() -> BytesIO:
+    """Create a minimal 1x1 pixel image for edge case testing.
+
+    Returns:
+        BytesIO containing a 1x1 pixel PNG image
+    """
+    img = Image.new("RGB", (1, 1), color="white")
+    img_bytes = BytesIO()
+    img.save(img_bytes, format="PNG")
+    img_bytes.seek(0)
+    return img_bytes
+
+
+@pytest.fixture
+def sample_image_large() -> BytesIO:
+    """Create a larger image for testing.
+
+    Returns:
+        BytesIO containing a 500x500 pixel PNG image
+    """
+    img = Image.new("RGB", (500, 500), color="green")
+    img_bytes = BytesIO()
+    img.save(img_bytes, format="PNG")
+    img_bytes.seek(0)
+    return img_bytes
+
+
+@pytest.fixture
+def corrupted_image_bytes() -> BytesIO:
+    """Create corrupted/invalid image bytes for error testing.
+
+    Returns:
+        BytesIO containing invalid image data
+    """
+    return BytesIO(b"not a valid image content at all")
