@@ -157,12 +157,63 @@ geoaiserve/
 
 ### Running Tests
 
-```bash
-# Install test dependencies
-uv add --dev pytest pytest-asyncio httpx
+The project includes comprehensive API contract tests using pytest.
 
-# Run tests
+```bash
+# Run all tests
 uv run pytest
+
+# Run tests with verbose output
+uv run pytest -v
+
+# Run specific test file
+uv run pytest tests/test_sam.py
+
+# Run specific test
+uv run pytest tests/test_sam.py::test_sam_generate_endpoint
+
+# Run tests matching a pattern
+uv run pytest -k "validation"
+
+# Run tests with coverage report
+uv run pytest --cov=geoaiserve --cov-report=term-missing
+
+# Run tests in parallel (if pytest-xdist installed)
+uv run pytest -n auto
+```
+
+### Test Structure
+
+```
+tests/
+├── conftest.py          # Shared fixtures (client, sample images, file_ids)
+├── test_common.py       # Health check, model listing endpoints
+├── test_files.py        # File upload/download CRUD operations
+├── test_sam.py          # SAM model endpoints + validation
+├── test_moondream.py    # Moondream model endpoints + validation
+├── test_dinov3.py       # DINOv3 model endpoints + validation
+└── test_integration.py  # Cross-model integration tests
+```
+
+### Test Categories
+
+- **Happy path tests**: Verify endpoints work with valid inputs
+- **Validation tests**: Test schema validation (422 errors for invalid parameters)
+- **Error handling tests**: Test 404 for non-existent resources, 400 for missing fields
+- **Response structure tests**: Validate response field types and values
+- **Integration tests**: Test file lifecycle and cross-model usage
+
+### Using Make Commands
+
+Common development tasks are available via Make:
+
+```bash
+make test          # Run all tests
+make test-cov      # Run tests with coverage
+make lint          # Run linting
+make format        # Format code
+make dev           # Start development server
+make clean         # Clean build artifacts
 ```
 
 ### Code Style
@@ -209,12 +260,12 @@ uv run uvicorn geoaiserve.main:app --reload --log-level debug
 - [ ] Detectron2 endpoints
 - [ ] TIMM endpoints
 
-### 📋 Phase 4: Production Readiness (Planned)
+### 📋 Phase 4: Production Readiness (In Progress)
 
 - [ ] Authentication & authorization
 - [ ] Rate limiting
 - [ ] Metrics & monitoring
-- [ ] Comprehensive tests
+- [x] Comprehensive tests (102 tests covering validation, error handling, response structure)
 - [ ] Docker deployment
 - [ ] CI/CD pipeline
 
