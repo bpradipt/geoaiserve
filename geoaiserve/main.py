@@ -142,7 +142,7 @@ def create_app() -> FastAPI:
                 error="ValidationError",
                 message="Request validation failed",
                 detail=exc.errors()
-            ).model_dump()
+            ).model_dump(mode="json")
         )
 
     @app.exception_handler(Exception)
@@ -166,7 +166,7 @@ def create_app() -> FastAPI:
                 error="InternalServerError",
                 message="An internal error occurred",
                 detail=str(exc) if settings.debug else None
-            ).model_dump()
+            ).model_dump(mode="json")
         )
 
     logger.info(f"FastAPI app created with prefix: {settings.api_prefix}")
