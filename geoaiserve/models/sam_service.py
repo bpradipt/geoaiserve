@@ -33,7 +33,7 @@ class SAMService(BaseGeoModel):
         """
         super().__init__(model_name, device, **kwargs)
         self.checkpoint = kwargs.get("checkpoint")
-        self.model_type = kwargs.get("sam_model_type", "vit_h")
+        self._sam_variant = kwargs.get("sam_model_type", "vit_h")
 
     @property
     def model_type(self) -> ModelType:
@@ -64,7 +64,7 @@ class SAMService(BaseGeoModel):
 
                 # Initialize SAM model
                 self._model = SamGeo(
-                    model_type=self.model_type,
+                    model_type=self._sam_variant,
                     checkpoint=self.checkpoint,
                     device=self.device.value,
                 )

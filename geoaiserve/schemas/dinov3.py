@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from .common import GeoMetadata
+from .common import GeoMetadata, ModelConfig
 from .requests import BaseInferenceRequest
 
 
@@ -39,8 +39,8 @@ class DINOv3BatchSimilarityRequest(BaseModel):
         min_length=1,
         description="List of file IDs for candidate images"
     )
-    model_params: dict = Field(
-        default_factory=dict,
+    model_params: ModelConfig = Field(
+        default_factory=ModelConfig,
         description="Model configuration"
     )
     top_k: int = Field(

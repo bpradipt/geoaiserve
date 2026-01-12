@@ -216,8 +216,8 @@ async def batch_similarity(
         # Get or create DINOv3 model
         dinov3_model = registry.get_model(
             model_type=ModelType.DINOV3,
-            model_name=request.model_params.get("model_name"),
-            device=request.model_params.get("device", "cpu"),
+            model_name=request.model_params.model_name,
+            device=request.model_params.device,
         )
 
         # Compute batch similarity
