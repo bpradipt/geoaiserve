@@ -173,7 +173,12 @@ class MoondreamService(BaseGeoModel):
 
             # Generate caption based on length
             if hasattr(self._model, "caption"):
-                caption = self._model.caption(image, length=length)
+                # Real model requires tokenizer and list of images
+                if self._tokenizer is not None:
+                    captions = self._model.caption([image], self._tokenizer, length=length)
+                    caption = captions[0] if captions else ""
+                else:
+                    caption = self._model.caption(image, length=length)
             else:
                 # Fallback for actual transformers model
                 caption = "Image caption placeholder"
@@ -213,7 +218,11 @@ class MoondreamService(BaseGeoModel):
             logger.info(f"Answering question: {question}")
 
             if hasattr(self._model, "query"):
-                answer = self._model.query(image, question)
+                # Real model requires tokenizer
+                if self._tokenizer is not None:
+                    answer = self._model.query(image, self._tokenizer, question)
+                else:
+                    answer = self._model.query(image, question)
             else:
                 answer = f"Answer to: {question}"
 
@@ -252,7 +261,11 @@ class MoondreamService(BaseGeoModel):
             logger.info(f"Detecting objects: {object_type}")
 
             if hasattr(self._model, "detect"):
-                detections = self._model.detect(image, object_type)
+                # Real model requires tokenizer
+                if self._tokenizer is not None:
+                    detections = self._model.detect(image, self._tokenizer, object_type)
+                else:
+                    detections = self._model.detect(image, object_type)
             else:
                 detections = {"objects": []}
 

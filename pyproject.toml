@@ -28,8 +28,9 @@ dev = [
 ml = [
     "torch>=2.0.0",
     "torchvision>=0.15.0",
-    "transformers>=4.30.0",
+    "transformers>=4.30.0,<4.50.0",
     "segment-anything-py",
+    "einops>=0.8.1",
 ]
 
 dev-ml = [
