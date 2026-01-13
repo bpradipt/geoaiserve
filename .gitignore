@@ -71,3 +71,9 @@ features/
 # Temporary files
 *.tmp
 temp/
+
+# Test data (user-provided GeoTIFF files)
+tests/data/*.tif
+tests/data/*.tiff
+!tests/data/.gitkeep
+!tests/data/README.md
