@@ -24,3 +24,26 @@ dev = [
     "pytest>=9.0.2",
     "pytest-asyncio>=1.3.0",
 ]
+
+ml = [
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
+    "transformers>=4.30.0",
+    "segment-anything-py",
+]
+
+dev-ml = [
+    {include-group = "dev"},
+    {include-group = "ml"},
+]
+
+[tool.pytest.ini_options]
+markers = [
+    "mock: tests using mock models (default)",
+    "real_model: tests requiring real ML models",
+    "real_sam: SAM-specific real tests",
+    "real_moondream: Moondream-specific real tests",
+    "real_dinov3: DINOv3-specific real tests",
+    "geotiff: tests using GeoTIFF files",
+    "slow: long-running tests",
+]
