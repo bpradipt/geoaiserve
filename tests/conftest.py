@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import os
 from io import BytesIO
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
+
+# Enable mock models for tests by default (before importing app)
+# Real model tests explicitly set allow_mock=False in their fixtures
+os.environ.setdefault("GEOAI_ALLOW_MOCK", "1")
 
 from geoaiserve.main import app
 from tests.markers import ML_AVAILABLE, SAMGEO_AVAILABLE
@@ -226,7 +231,8 @@ def real_sam_service():
     from geoaiserve.models.sam_service import SAMService
     from geoaiserve.schemas.common import DeviceType
 
-    service = SAMService(device=DeviceType.CPU)
+    # Explicitly disable mock to ensure real model is used
+    service = SAMService(device=DeviceType.CPU, allow_mock=False)
     service.load()
     yield service
     service.unload()
@@ -245,7 +251,8 @@ def real_moondream_service():
     from geoaiserve.models.moondream_service import MoondreamService
     from geoaiserve.schemas.common import DeviceType
 
-    service = MoondreamService(device=DeviceType.CPU)
+    # Explicitly disable mock to ensure real model is used
+    service = MoondreamService(device=DeviceType.CPU, allow_mock=False)
     service.load()
     yield service
     service.unload()
@@ -264,7 +271,8 @@ def real_dinov3_service():
     from geoaiserve.models.dinov3_service import DINOv3Service
     from geoaiserve.schemas.common import DeviceType
 
-    service = DINOv3Service(device=DeviceType.CPU)
+    # Explicitly disable mock to ensure real model is used
+    service = DINOv3Service(device=DeviceType.CPU, allow_mock=False)
     service.load()
     yield service
     service.unload()

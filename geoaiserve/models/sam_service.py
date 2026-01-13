@@ -71,13 +71,20 @@ class SAMService(BaseGeoModel):
                 self._loaded = True
                 logger.info(f"SAM model loaded successfully: {self.model_name}")
 
-            except ImportError:
-                logger.warning(
-                    "samgeo not installed. Creating mock SAM service for testing."
-                )
-                # Create a mock for testing when samgeo is not available
-                self._model = self._create_mock_model()
-                self._loaded = True
+            except ImportError as e:
+                if self._allow_mock:
+                    logger.warning(
+                        "samgeo not installed. Creating mock SAM service. "
+                        "Set allow_mock=False or unset GEOAI_ALLOW_MOCK to require real model."
+                    )
+                    self._model = self._create_mock_model()
+                    self._is_mock = True
+                    self._loaded = True
+                else:
+                    raise ImportError(
+                        f"Required dependency 'samgeo' not installed for SAM. "
+                        f"Install with: pip install samgeo"
+                    ) from e
 
         except Exception as e:
             logger.error(f"Failed to load SAM model: {e}")

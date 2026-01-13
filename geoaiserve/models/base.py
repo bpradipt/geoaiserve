@@ -2,10 +2,21 @@
 
 from __future__ import annotations
 
+import os
 from abc import ABC, abstractmethod
 from typing import Any
 
 from ..schemas.common import DeviceType, ModelType
+
+
+def _allow_mock_from_env() -> bool:
+    """Check if mock models are allowed via environment variable.
+
+    Returns:
+        True if GEOAI_ALLOW_MOCK is set to '1', 'true', or 'yes'
+    """
+    value = os.environ.get("GEOAI_ALLOW_MOCK", "").lower()
+    return value in ("1", "true", "yes")
 
 
 class BaseGeoModel(ABC):
@@ -15,6 +26,7 @@ class BaseGeoModel(ABC):
         self,
         model_name: str,
         device: DeviceType = DeviceType.CPU,
+        allow_mock: bool | None = None,
         **kwargs: Any,
     ):
         """Initialize the model.
@@ -22,6 +34,9 @@ class BaseGeoModel(ABC):
         Args:
             model_name: HuggingFace model identifier or local path
             device: Device to run inference on (cuda, cpu, mps)
+            allow_mock: If True, fall back to mock when dependencies missing.
+                        If None, check GEOAI_ALLOW_MOCK env var.
+                        Default is False (raise error if deps missing).
             **kwargs: Additional model-specific parameters
         """
         self.model_name = model_name
@@ -29,6 +44,18 @@ class BaseGeoModel(ABC):
         self.kwargs = kwargs
         self._model: Any = None
         self._loaded = False
+        self._is_mock = False
+
+        # Determine if mock fallback is allowed
+        if allow_mock is None:
+            self._allow_mock = _allow_mock_from_env()
+        else:
+            self._allow_mock = allow_mock
+
+    @property
+    def is_mock(self) -> bool:
+        """Check if this service is using a mock model."""
+        return self._is_mock
 
     @property
     @abstractmethod

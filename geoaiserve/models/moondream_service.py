@@ -77,14 +77,21 @@ class MoondreamService(BaseGeoModel):
                 self._loaded = True
                 logger.info(f"Moondream model loaded successfully: {self.model_name}")
 
-            except ImportError:
-                logger.warning(
-                    "transformers not installed. Creating mock Moondream service."
-                )
-                # Create a mock for testing
-                self._model = self._create_mock_model()
-                self._tokenizer = None
-                self._loaded = True
+            except ImportError as e:
+                if self._allow_mock:
+                    logger.warning(
+                        "transformers not installed. Creating mock Moondream service. "
+                        "Set allow_mock=False or unset GEOAI_ALLOW_MOCK to require real model."
+                    )
+                    self._model = self._create_mock_model()
+                    self._tokenizer = None
+                    self._is_mock = True
+                    self._loaded = True
+                else:
+                    raise ImportError(
+                        f"Required dependency 'transformers' not installed for Moondream. "
+                        f"Install with: uv sync --group ml"
+                    ) from e
 
         except Exception as e:
             logger.error(f"Failed to load Moondream model: {e}")
