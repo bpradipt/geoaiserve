@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from geoaiserve.main import app
+from tests.markers import ML_AVAILABLE, SAMGEO_AVAILABLE
 
 
 @pytest.fixture
@@ -141,3 +142,129 @@ def corrupted_image_bytes() -> BytesIO:
         BytesIO containing invalid image data
     """
     return BytesIO(b"not a valid image content at all")
+
+
+# ============================================================================
+# GeoTIFF and Real Model Testing Fixtures
+# ============================================================================
+
+
+@pytest.fixture
+def test_data_dir() -> Path:
+    """Path to test data directory.
+
+    Returns:
+        Path to tests/data/ directory
+    """
+    return Path(__file__).parent / "data"
+
+
+@pytest.fixture
+def geotiff_paths(test_data_dir: Path) -> list[Path]:
+    """List of available GeoTIFF files in test data directory.
+
+    Args:
+        test_data_dir: Path to test data directory
+
+    Returns:
+        List of paths to .tif/.tiff files
+    """
+    tif_files = list(test_data_dir.glob("*.tif"))
+    tiff_files = list(test_data_dir.glob("*.tiff"))
+    return sorted(tif_files + tiff_files)
+
+
+@pytest.fixture
+def sample_geotiff(geotiff_paths: list[Path]) -> Path | None:
+    """First available GeoTIFF file for testing.
+
+    Args:
+        geotiff_paths: List of GeoTIFF paths
+
+    Returns:
+        Path to first GeoTIFF or None if none available
+    """
+    if geotiff_paths:
+        return geotiff_paths[0]
+    return None
+
+
+@pytest.fixture
+def uploaded_geotiff_id(
+    client: TestClient, sample_geotiff: Path | None
+) -> str | None:
+    """Upload a GeoTIFF file and return the file_id.
+
+    Args:
+        client: FastAPI test client
+        sample_geotiff: Path to sample GeoTIFF
+
+    Returns:
+        file_id string or None if no GeoTIFF available
+    """
+    if sample_geotiff is None:
+        return None
+
+    with open(sample_geotiff, "rb") as f:
+        response = client.post(
+            "/api/v1/files/upload",
+            files={"file": (sample_geotiff.name, f, "image/tiff")},
+        )
+    return response.json()["file_id"]
+
+
+@pytest.fixture(scope="session")
+def real_sam_service():
+    """Real SAM model service (session-scoped for efficiency).
+
+    Returns:
+        SAMService instance with real model or None if not available
+    """
+    if not SAMGEO_AVAILABLE:
+        return None
+
+    from geoaiserve.models.sam_service import SAMService
+    from geoaiserve.schemas.common import DeviceType
+
+    service = SAMService(device=DeviceType.CPU)
+    service.load()
+    yield service
+    service.unload()
+
+
+@pytest.fixture(scope="session")
+def real_moondream_service():
+    """Real Moondream model service (session-scoped for efficiency).
+
+    Returns:
+        MoondreamService instance with real model or None if not available
+    """
+    if not ML_AVAILABLE:
+        return None
+
+    from geoaiserve.models.moondream_service import MoondreamService
+    from geoaiserve.schemas.common import DeviceType
+
+    service = MoondreamService(device=DeviceType.CPU)
+    service.load()
+    yield service
+    service.unload()
+
+
+@pytest.fixture(scope="session")
+def real_dinov3_service():
+    """Real DINOv3 model service (session-scoped for efficiency).
+
+    Returns:
+        DINOv3Service instance with real model or None if not available
+    """
+    if not ML_AVAILABLE:
+        return None
+
+    from geoaiserve.models.dinov3_service import DINOv3Service
+    from geoaiserve.schemas.common import DeviceType
+
+    service = DINOv3Service(device=DeviceType.CPU)
+    service.load()
+    yield service
+    service.unload()
