@@ -216,6 +216,46 @@ make test-real-moondream
 make test-real-dinov3
 ```
 
+### Mock vs Real Model Control
+
+The API includes safeguards to prevent silent fallback to mock models in production:
+
+| Scenario | Behavior |
+|----------|----------|
+| **Production** (default) | Raises `ImportError` if ML dependencies missing |
+| **Tests** (`GEOAI_ALLOW_MOCK=1`) | Falls back to mock if dependencies missing |
+| **Explicit** (`allow_mock=False`) | Always raises error if dependencies missing |
+
+**Environment Variable:**
+
+```bash
+# Enable mock fallback (for CI/testing without ML deps)
+export GEOAI_ALLOW_MOCK=1
+
+# Production (default) - fails loudly if deps missing
+unset GEOAI_ALLOW_MOCK
+```
+
+**Programmatic Control:**
+
+```python
+from geoaiserve.models.moondream_service import MoondreamService
+from geoaiserve.schemas.common import DeviceType
+
+# Production (default) - fails if deps missing
+service = MoondreamService(device=DeviceType.CPU)
+
+# Explicitly allow mock (testing only)
+service = MoondreamService(device=DeviceType.CPU, allow_mock=True)
+
+# Explicitly require real model
+service = MoondreamService(device=DeviceType.CPU, allow_mock=False)
+
+# Check if mock is being used
+if service.is_mock:
+    print("WARNING: Using mock model")
+```
+
 ### Test Structure
 
 ```
