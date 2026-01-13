@@ -5,6 +5,8 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
+pytestmark = pytest.mark.mock
+
 
 def test_dinov3_extract_features(client: TestClient, uploaded_file_id: str) -> None:
     """Test DINOv3 feature extraction endpoint.

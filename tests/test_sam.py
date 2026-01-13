@@ -5,6 +5,8 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
+pytestmark = pytest.mark.mock
+
 
 def test_sam_generate_endpoint(client: TestClient, uploaded_file_id: str) -> None:
     """Test SAM automatic mask generation endpoint.

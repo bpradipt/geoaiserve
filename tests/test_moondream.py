@@ -5,6 +5,8 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
+pytestmark = pytest.mark.mock
+
 
 def test_moondream_caption(client: TestClient, uploaded_file_id: str) -> None:
     """Test Moondream image captioning endpoint.
