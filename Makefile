@@ -1,4 +1,4 @@
-.PHONY: help install dev test test-cov test-watch lint format clean run docs
+.PHONY: help install install-ml dev test test-cov test-watch test-mock test-real test-real-sam test-real-moondream test-real-dinov3 test-geotiff lint format clean run docs
 
 # Default target
 help:
@@ -7,20 +7,31 @@ help:
 	@echo "Usage: make [target]"
 	@echo ""
 	@echo "Targets:"
-	@echo "  install     Install dependencies"
-	@echo "  dev         Start development server with hot reload"
-	@echo "  run         Start production server"
-	@echo "  test        Run all tests"
-	@echo "  test-cov    Run tests with coverage report"
-	@echo "  test-watch  Run tests in watch mode (requires pytest-watch)"
-	@echo "  lint        Run linting checks"
-	@echo "  format      Format code with ruff"
-	@echo "  clean       Remove build artifacts and cache"
-	@echo "  docs        Open API documentation in browser"
+	@echo "  install         Install dependencies"
+	@echo "  install-ml      Install dependencies with ML models"
+	@echo "  dev             Start development server with hot reload"
+	@echo "  run             Start production server"
+	@echo "  test            Run all tests"
+	@echo "  test-cov        Run tests with coverage report"
+	@echo "  test-watch      Run tests in watch mode (requires pytest-watch)"
+	@echo "  test-mock       Run only mock tests (fast)"
+	@echo "  test-real       Run only real model tests"
+	@echo "  test-real-sam   Run real SAM model tests"
+	@echo "  test-real-moondream  Run real Moondream model tests"
+	@echo "  test-real-dinov3     Run real DINOv3 model tests"
+	@echo "  test-geotiff    Run GeoTIFF-specific tests"
+	@echo "  lint            Run linting checks"
+	@echo "  format          Format code with ruff"
+	@echo "  clean           Remove build artifacts and cache"
+	@echo "  docs            Open API documentation in browser"
 
 # Install dependencies
 install:
 	uv sync
+
+# Install dependencies with ML models
+install-ml:
+	uv sync --group ml
 
 # Start development server
 dev:
@@ -48,6 +59,30 @@ test-watch:
 test-file:
 	@echo "Usage: make test-file FILE=tests/test_sam.py"
 	@test -n "$(FILE)" && uv run pytest $(FILE) -v || echo "Please specify FILE=<path>"
+
+# Run only mock tests (fast, no ML dependencies required)
+test-mock:
+	uv run pytest -m mock -v
+
+# Run only real model tests (requires ML dependencies)
+test-real:
+	uv run pytest -m real_model -v
+
+# Run real SAM model tests
+test-real-sam:
+	uv run pytest -m real_sam -v
+
+# Run real Moondream model tests
+test-real-moondream:
+	uv run pytest -m real_moondream -v
+
+# Run real DINOv3 model tests
+test-real-dinov3:
+	uv run pytest -m real_dinov3 -v
+
+# Run GeoTIFF-specific tests
+test-geotiff:
+	uv run pytest -m geotiff -v
 
 # Run linting
 lint:

@@ -182,17 +182,59 @@ uv run pytest --cov=geoaiserve --cov-report=term-missing
 uv run pytest -n auto
 ```
 
+### Test Markers
+
+Tests are organized with pytest markers for flexible test selection:
+
+| Marker | Description | Command |
+|--------|-------------|---------|
+| `mock` | Tests using mock models (fast, no ML deps) | `pytest -m mock` |
+| `real_model` | Tests requiring real ML models | `pytest -m real_model` |
+| `real_sam` | SAM-specific real model tests | `pytest -m real_sam` |
+| `real_moondream` | Moondream-specific real tests | `pytest -m real_moondream` |
+| `real_dinov3` | DINOv3-specific real tests | `pytest -m real_dinov3` |
+| `geotiff` | Tests using GeoTIFF files | `pytest -m geotiff` |
+| `slow` | Long-running tests | `pytest -m "not slow"` |
+
+### Real Model Testing
+
+To run tests with real ML models:
+
+```bash
+# Install ML dependencies
+uv sync --group ml
+
+# Add GeoTIFF test files
+cp /path/to/satellite.tif tests/data/
+
+# Run real model tests
+make test-real
+
+# Or run specific model tests
+make test-real-sam
+make test-real-moondream
+make test-real-dinov3
+```
+
 ### Test Structure
 
 ```
 tests/
-├── conftest.py          # Shared fixtures (client, sample images, file_ids)
-├── test_common.py       # Health check, model listing endpoints
-├── test_files.py        # File upload/download CRUD operations
-├── test_sam.py          # SAM model endpoints + validation
-├── test_moondream.py    # Moondream model endpoints + validation
-├── test_dinov3.py       # DINOv3 model endpoints + validation
-└── test_integration.py  # Cross-model integration tests
+├── conftest.py              # Shared fixtures (client, sample images, file_ids)
+├── markers.py               # Skip decorators for ML dependencies
+├── data/                    # User-provided GeoTIFF test files
+│   ├── .gitkeep
+│   └── README.md
+├── test_common.py           # Health check, model listing endpoints
+├── test_files.py            # File upload/download CRUD operations
+├── test_sam.py              # SAM model endpoints (mock)
+├── test_moondream.py        # Moondream model endpoints (mock)
+├── test_dinov3.py           # DINOv3 model endpoints (mock)
+├── test_integration.py      # Cross-model integration tests
+├── test_geotiff_loader.py   # GeoTIFF loader utility tests
+├── test_real_sam.py         # Real SAM model tests
+├── test_real_moondream.py   # Real Moondream model tests
+└── test_real_dinov3.py      # Real DINOv3 model tests
 ```
 
 ### Test Categories
