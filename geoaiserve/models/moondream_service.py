@@ -268,11 +268,14 @@ class MoondreamService(BaseGeoModel):
             logger.info(f"Detecting objects: {object_type}")
 
             if hasattr(self._model, "detect"):
-                # Real model requires tokenizer
+                # Real model signature: detect(image, query, tokenizer)
                 if self._tokenizer is not None:
-                    detections = self._model.detect(image, self._tokenizer, object_type)
+                    detections = self._model.detect(image, object_type, self._tokenizer)
                 else:
                     detections = self._model.detect(image, object_type)
+                # Handle None result (no detections found)
+                if detections is None:
+                    detections = {"objects": []}
             else:
                 detections = {"objects": []}
 
@@ -310,10 +313,26 @@ class MoondreamService(BaseGeoModel):
 
             logger.info(f"Pointing to: {object_description}")
 
-            # Mock implementation
+            if hasattr(self._model, "point"):
+                # Real model signature: point(image, query, tokenizer)
+                if self._tokenizer is not None:
+                    points = self._model.point(image, object_description, self._tokenizer)
+                else:
+                    points = self._model.point(image, object_description)
+                # Handle None result
+                if points is None:
+                    points = []
+            else:
+                # Model doesn't support point detection
+                logger.warning(
+                    f"Model {self.model_name} does not support point detection. "
+                    "This feature may require a different model revision."
+                )
+                points = []
+
             return {
                 "object_description": object_description,
-                "points": [[100, 100]],  # Mock point
+                "points": points,
             }
 
         except Exception as e:
