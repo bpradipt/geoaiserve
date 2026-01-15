@@ -98,9 +98,10 @@ async def extract_features(
 
         return DINOv3FeaturesResponse(
             status="success",
-            cls_token=result["cls_token"][0] if isinstance(result["cls_token"][0], list) else result["cls_token"],
+            cls_token=result["cls_token"],
             patch_features=result["patch_features"],
             feature_dim=result["feature_dim"],
+            patch_grid=result.get("patch_grid"),
             metadata=GeoMetadata(
                 processing_time=processing_time,
                 model_name=dinov3_model.model_name,

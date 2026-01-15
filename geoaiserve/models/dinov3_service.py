@@ -170,9 +170,10 @@ class DINOv3Service(BaseGeoModel):
                 # Mock model
                 features = self._model.extract_features(image)
                 return {
-                    "cls_token": features.tolist(),
+                    "cls_token": features.flatten().tolist(),
                     "patch_features": None,
                     "feature_dim": features.shape[-1],
+                    "patch_grid": None,
                 }
             else:
                 # Real model
@@ -192,16 +193,27 @@ class DINOv3Service(BaseGeoModel):
                     outputs = self._model(**inputs)
 
                 # Get CLS token and patch features
+                # Squeeze batch dimension for single images
                 cls_token = outputs.last_hidden_state[:, 0].cpu().numpy()
-                patch_features = None
+                cls_token = cls_token.squeeze(0)  # [batch, dim] -> [dim]
 
+                # Calculate patch grid dimensions
+                # DINOv2 uses 14x14 patches, input resized to 224x224
+                num_patches = outputs.last_hidden_state.shape[1] - 1  # Exclude CLS token
+                grid_size = int(np.sqrt(num_patches))
+                patch_grid = [grid_size, grid_size]
+
+                patch_features = None
                 if return_patch_features:
+                    # [batch, num_patches, dim] -> [num_patches, dim]
                     patch_features = outputs.last_hidden_state[:, 1:].cpu().numpy()
+                    patch_features = patch_features.squeeze(0)
 
                 return {
                     "cls_token": cls_token.tolist(),
                     "patch_features": patch_features.tolist() if patch_features is not None else None,
-                    "feature_dim": cls_token.shape[-1],
+                    "feature_dim": int(cls_token.shape[-1]),
+                    "patch_grid": patch_grid,
                 }
 
         except Exception as e:
@@ -236,34 +248,68 @@ class DINOv3Service(BaseGeoModel):
             # Extract patch features
             features_result = self.extract_features(image, return_patch_features=True)
 
-            # For mock model
+            # For mock model (patch_features is None)
             if features_result["patch_features"] is None:
                 # Return mock similarity maps
                 similarity_maps = [
-                    np.random.rand(28, 28).tolist()  # Mock similarity map
+                    np.random.rand(16, 16).tolist()  # Mock similarity map
                     for _ in query_points
                 ]
                 return {
                     "query_points": query_points,
                     "similarity_maps": similarity_maps,
-                    "map_size": [28, 28],
+                    "map_size": [16, 16],
                 }
 
-            # For real model
+            # For real model - compute actual similarity
             patch_features = np.array(features_result["patch_features"])
+            num_patches = patch_features.shape[0]
+            feature_dim = patch_features.shape[1]
+
+            # Calculate patch grid dimensions
+            # DINOv2 uses 14x14 patches, input is resized to 224x224
+            # So for 224x224 image: 224/14 = 16 patches per side
+            grid_size = int(np.sqrt(num_patches))
+            h_patches, w_patches = grid_size, grid_size
+
+            # Normalize patch features for cosine similarity
+            patch_norms = np.linalg.norm(patch_features, axis=1, keepdims=True) + 1e-8
+            patch_features_norm = patch_features / patch_norms
+
+            # Get original image size for coordinate mapping
+            img_width, img_height = image.size
 
             # Compute similarity maps for each query point
-            # This is a simplified implementation
             similarity_maps = []
             for point in query_points:
-                # Mock similarity computation
-                similarity_map = np.random.rand(28, 28)
+                x, y = point[0], point[1]
+
+                # Map pixel coordinates to patch indices
+                # The model input is resized to 224x224, then divided into patches
+                patch_x = int((x / img_width) * w_patches)
+                patch_y = int((y / img_height) * h_patches)
+
+                # Clamp to valid range
+                patch_x = max(0, min(patch_x, w_patches - 1))
+                patch_y = max(0, min(patch_y, h_patches - 1))
+
+                # Get query patch index (row-major order)
+                query_patch_idx = patch_y * w_patches + patch_x
+
+                # Get query patch features (already normalized)
+                query_feat = patch_features_norm[query_patch_idx]
+
+                # Compute cosine similarity with all patches
+                similarities = np.dot(patch_features_norm, query_feat)
+
+                # Reshape to 2D grid
+                similarity_map = similarities.reshape(h_patches, w_patches)
                 similarity_maps.append(similarity_map.tolist())
 
             return {
                 "query_points": query_points,
                 "similarity_maps": similarity_maps,
-                "map_size": [28, 28],
+                "map_size": [h_patches, w_patches],
             }
 
         except Exception as e:

@@ -68,6 +68,10 @@ class DINOv3FeaturesResponse(BaseModel):
         description="Patch-level features if requested"
     )
     feature_dim: int = Field(..., description="Feature dimensionality")
+    patch_grid: list[int] | None = Field(
+        None,
+        description="Patch grid dimensions [height, width]"
+    )
     metadata: GeoMetadata = Field(..., description="Processing metadata")
 
 
