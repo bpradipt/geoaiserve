@@ -79,9 +79,9 @@ class TestRealDINOv3Service:
         assert "patch_grid" in result
         assert result["patch_grid"] is not None
         assert len(result["patch_grid"]) == 2
-        # DINOv2 uses 14x14 patches, 224/14 = 16 patches per side
-        assert result["patch_grid"][0] == 16
-        assert result["patch_grid"][1] == 16
+        # geoai uses 16x16 patches with target_size 896: 896/16 = 56 patches per side
+        assert result["patch_grid"][0] == 56
+        assert result["patch_grid"][1] == 56
 
     def test_compute_similarity(self, real_dinov3_service):
         """Should compute similarity between two images."""
@@ -175,8 +175,8 @@ class TestDINOv3PatchSimilarity:
 
         sim_map = np.array(result["similarity_maps"][0])
         # The center patch should have max similarity (1.0)
-        # Center of 16x16 grid is around (8, 8)
-        center_x, center_y = 8, 8
+        # geoai uses 56x56 grid, center is around (28, 28)
+        center_x, center_y = 28, 28
         max_sim = sim_map.max()
         center_sim = sim_map[center_y, center_x]
 
@@ -192,10 +192,11 @@ class TestDINOv3PatchSimilarity:
         )
 
         assert "map_size" in result
-        assert result["map_size"] == [16, 16]
+        # geoai uses 56x56 grid (896/16 patches)
+        assert result["map_size"] == [56, 56]
 
         sim_map = np.array(result["similarity_maps"][0])
-        assert sim_map.shape == (16, 16)
+        assert sim_map.shape == (56, 56)
 
     def test_multiple_query_points(self, real_dinov3_service):
         """Should handle multiple query points correctly."""
@@ -210,7 +211,8 @@ class TestDINOv3PatchSimilarity:
 
         for sim_map in result["similarity_maps"]:
             sim_array = np.array(sim_map)
-            assert sim_array.shape == (16, 16)
+            # geoai uses 56x56 grid (896/16 patches)
+            assert sim_array.shape == (56, 56)
             # Similarity values should be between -1 and 1
             assert sim_array.min() >= -1.0
             assert sim_array.max() <= 1.0

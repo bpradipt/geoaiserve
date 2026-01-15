@@ -1,4 +1,4 @@
-"""DINOv3 (DINOv2) feature extraction service implementation."""
+"""DINOv3 feature extraction service using geoai library."""
 
 from __future__ import annotations
 
@@ -16,23 +16,27 @@ logger = logging.getLogger(__name__)
 
 
 class DINOv3Service(BaseGeoModel):
-    """Service for DINOv3 feature extraction and similarity analysis."""
+    """Service for DINOv3 feature extraction using geoai's DINOv3GeoProcessor.
+
+    This service wraps geoai's DINOv3GeoProcessor to provide satellite-optimized
+    feature extraction using custom-trained weights (SAT-493M).
+    """
 
     def __init__(
         self,
-        model_name: str = "facebook/dinov2-base",
+        model_name: str = "dinov3_vitl16",
         device: DeviceType = DeviceType.CPU,
         **kwargs: Any,
     ):
         """Initialize DINOv3 service.
 
         Args:
-            model_name: HuggingFace model identifier
+            model_name: geoai model name (dinov3_vits16, dinov3_vitb16, dinov3_vitl16)
             device: Device to run inference on
             **kwargs: Additional model parameters
         """
         super().__init__(model_name, device, **kwargs)
-        self.patch_size = kwargs.get("patch_size", 14)
+        self._processor = None
 
     @property
     def model_type(self) -> ModelType:
@@ -48,8 +52,18 @@ class DINOv3Service(BaseGeoModel):
             "batch_similarity",
         ]
 
+    def _get_torch_device(self):
+        """Get torch device from DeviceType."""
+        import torch
+
+        if self.device == DeviceType.CUDA:
+            return torch.device("cuda")
+        elif self.device == DeviceType.MPS:
+            return torch.device("mps")
+        return torch.device("cpu")
+
     def load(self) -> None:
-        """Load the DINOv3 model into memory."""
+        """Load the DINOv3 model using geoai."""
         if self._loaded:
             logger.info(f"DINOv3 model already loaded: {self.model_name}")
             return
@@ -58,25 +72,21 @@ class DINOv3Service(BaseGeoModel):
             logger.info(f"Loading DINOv3 model: {self.model_name} on {self.device}")
 
             try:
-                from transformers import AutoImageProcessor, AutoModel
+                from geoai import DINOv3GeoProcessor
 
-                # Load model and processor
-                self._processor = AutoImageProcessor.from_pretrained(self.model_name)
-                self._model = AutoModel.from_pretrained(self.model_name)
-
-                # Move to device
-                if self.device == DeviceType.CUDA:
-                    self._model = self._model.to("cuda")
-                elif self.device == DeviceType.MPS:
-                    self._model = self._model.to("mps")
-
+                device = self._get_torch_device()
+                self._processor = DINOv3GeoProcessor(
+                    model_name=self.model_name,
+                    device=device,
+                )
+                self._model = self._processor
                 self._loaded = True
-                logger.info(f"DINOv3 model loaded successfully: {self.model_name}")
+                logger.info(f"DINOv3 model loaded successfully via geoai: {self.model_name}")
 
             except ImportError as e:
                 if self._allow_mock:
                     logger.warning(
-                        "transformers not installed. Creating mock DINOv3 service. "
+                        "geoai not installed. Creating mock DINOv3 service. "
                         "Set allow_mock=False or unset GEOAI_ALLOW_MOCK to require real model."
                     )
                     self._model = self._create_mock_model()
@@ -85,7 +95,7 @@ class DINOv3Service(BaseGeoModel):
                     self._loaded = True
                 else:
                     raise ImportError(
-                        f"Required dependency 'transformers' not installed for DINOv3. "
+                        f"Required dependency 'geoai' not installed for DINOv3. "
                         f"Install with: uv sync --group ml"
                     ) from e
 
@@ -98,8 +108,8 @@ class DINOv3Service(BaseGeoModel):
 
         class MockDINOv3:
             def extract_features(self, image):
-                # Return mock features (768-dim for base model)
-                return np.random.randn(1, 768).astype(np.float32)
+                # Return mock features (1024-dim for ViT-L model)
+                return np.random.randn(1, 1024).astype(np.float32)
 
             def compute_similarity(self, features1, features2):
                 # Return mock similarity score
@@ -147,7 +157,7 @@ class DINOv3Service(BaseGeoModel):
         return_patch_features: bool = False,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        """Extract features from an image.
+        """Extract features from an image using geoai's DINOv3GeoProcessor.
 
         Args:
             image: PIL Image or path to image
@@ -164,9 +174,9 @@ class DINOv3Service(BaseGeoModel):
             if isinstance(image, (Path, str)):
                 image = Image.open(image).convert("RGB")
 
-            logger.info("Extracting DINOv3 features")
+            logger.info("Extracting DINOv3 features via geoai")
 
-            if hasattr(self._model, "extract_features"):
+            if self._is_mock:
                 # Mock model
                 features = self._model.extract_features(image)
                 return {
@@ -175,46 +185,38 @@ class DINOv3Service(BaseGeoModel):
                     "feature_dim": features.shape[-1],
                     "patch_grid": None,
                 }
+
+            # Use geoai's extract_features
+            # First preprocess the image
+            preprocessed = self._processor.preprocess_image_for_dinov3(
+                np.array(image),
+                target_size=kwargs.get("target_size", 896),
+            )
+
+            # Extract features
+            features, h_patches, w_patches = self._processor.extract_features(preprocessed)
+
+            # Convert to numpy for our API format
+            features_np = features.cpu().numpy()
+
+            # Global average pooling for CLS-like token
+            # geoai returns [batch, num_patches, feature_dim]
+            cls_token = features_np.mean(axis=(0, 1))
+
+            result = {
+                "cls_token": cls_token.tolist(),
+                "feature_dim": int(features_np.shape[-1]),
+                "patch_grid": [h_patches, w_patches],
+            }
+
+            if return_patch_features:
+                # Reshape to [num_patches, feature_dim]
+                patch_features = features_np.reshape(-1, features_np.shape[-1])
+                result["patch_features"] = patch_features.tolist()
             else:
-                # Real model
-                import torch
+                result["patch_features"] = None
 
-                # Preprocess image
-                inputs = self._processor(images=image, return_tensors="pt")
-
-                # Move to device
-                if self.device == DeviceType.CUDA:
-                    inputs = {k: v.to("cuda") for k, v in inputs.items()}
-                elif self.device == DeviceType.MPS:
-                    inputs = {k: v.to("mps") for k, v in inputs.items()}
-
-                # Extract features
-                with torch.no_grad():
-                    outputs = self._model(**inputs)
-
-                # Get CLS token and patch features
-                # Squeeze batch dimension for single images
-                cls_token = outputs.last_hidden_state[:, 0].cpu().numpy()
-                cls_token = cls_token.squeeze(0)  # [batch, dim] -> [dim]
-
-                # Calculate patch grid dimensions
-                # DINOv2 uses 14x14 patches, input resized to 224x224
-                num_patches = outputs.last_hidden_state.shape[1] - 1  # Exclude CLS token
-                grid_size = int(np.sqrt(num_patches))
-                patch_grid = [grid_size, grid_size]
-
-                patch_features = None
-                if return_patch_features:
-                    # [batch, num_patches, dim] -> [num_patches, dim]
-                    patch_features = outputs.last_hidden_state[:, 1:].cpu().numpy()
-                    patch_features = patch_features.squeeze(0)
-
-                return {
-                    "cls_token": cls_token.tolist(),
-                    "patch_features": patch_features.tolist() if patch_features is not None else None,
-                    "feature_dim": int(cls_token.shape[-1]),
-                    "patch_grid": patch_grid,
-                }
+            return result
 
         except Exception as e:
             logger.error(f"Feature extraction failed: {e}")
@@ -226,7 +228,7 @@ class DINOv3Service(BaseGeoModel):
         query_points: list[list[float]],
         **kwargs: Any,
     ) -> dict[str, Any]:
-        """Compute patch similarity for query points.
+        """Compute patch similarity for query points using geoai.
 
         Args:
             image: PIL Image or path to image
@@ -245,14 +247,10 @@ class DINOv3Service(BaseGeoModel):
 
             logger.info(f"Computing patch similarity for {len(query_points)} points")
 
-            # Extract patch features
-            features_result = self.extract_features(image, return_patch_features=True)
-
-            # For mock model (patch_features is None)
-            if features_result["patch_features"] is None:
+            if self._is_mock:
                 # Return mock similarity maps
                 similarity_maps = [
-                    np.random.rand(16, 16).tolist()  # Mock similarity map
+                    np.random.rand(16, 16).tolist()
                     for _ in query_points
                 ]
                 return {
@@ -261,20 +259,14 @@ class DINOv3Service(BaseGeoModel):
                     "map_size": [16, 16],
                 }
 
-            # For real model - compute actual similarity
-            patch_features = np.array(features_result["patch_features"])
-            num_patches = patch_features.shape[0]
-            feature_dim = patch_features.shape[1]
+            # Preprocess image
+            preprocessed = self._processor.preprocess_image_for_dinov3(
+                np.array(image),
+                target_size=kwargs.get("target_size", 896),
+            )
 
-            # Calculate patch grid dimensions
-            # DINOv2 uses 14x14 patches, input is resized to 224x224
-            # So for 224x224 image: 224/14 = 16 patches per side
-            grid_size = int(np.sqrt(num_patches))
-            h_patches, w_patches = grid_size, grid_size
-
-            # Normalize patch features for cosine similarity
-            patch_norms = np.linalg.norm(patch_features, axis=1, keepdims=True) + 1e-8
-            patch_features_norm = patch_features / patch_norms
+            # Extract features
+            features, h_patches, w_patches = self._processor.extract_features(preprocessed)
 
             # Get original image size for coordinate mapping
             img_width, img_height = image.size
@@ -285,7 +277,6 @@ class DINOv3Service(BaseGeoModel):
                 x, y = point[0], point[1]
 
                 # Map pixel coordinates to patch indices
-                # The model input is resized to 224x224, then divided into patches
                 patch_x = int((x / img_width) * w_patches)
                 patch_y = int((y / img_height) * h_patches)
 
@@ -293,18 +284,11 @@ class DINOv3Service(BaseGeoModel):
                 patch_x = max(0, min(patch_x, w_patches - 1))
                 patch_y = max(0, min(patch_y, h_patches - 1))
 
-                # Get query patch index (row-major order)
-                query_patch_idx = patch_y * w_patches + patch_x
-
-                # Get query patch features (already normalized)
-                query_feat = patch_features_norm[query_patch_idx]
-
-                # Compute cosine similarity with all patches
-                similarities = np.dot(patch_features_norm, query_feat)
-
-                # Reshape to 2D grid
-                similarity_map = similarities.reshape(h_patches, w_patches)
-                similarity_maps.append(similarity_map.tolist())
+                # Use geoai's compute_patch_similarity
+                sim_map = self._processor.compute_patch_similarity(
+                    features, patch_x, patch_y
+                )
+                similarity_maps.append(sim_map.cpu().numpy().tolist())
 
             return {
                 "query_points": query_points,
@@ -337,8 +321,8 @@ class DINOv3Service(BaseGeoModel):
 
         try:
             # Extract features from both images
-            features1 = self.extract_features(image1)
-            features2 = self.extract_features(image2)
+            features1 = self.extract_features(image1, **kwargs)
+            features2 = self.extract_features(image2, **kwargs)
 
             # Compute cosine similarity
             feat1 = np.array(features1["cls_token"])
@@ -385,7 +369,7 @@ class DINOv3Service(BaseGeoModel):
             logger.info(f"Computing batch similarity for {len(candidate_images)} candidates")
 
             # Extract query features
-            query_features = self.extract_features(query_image)
+            query_features = self.extract_features(query_image, **kwargs)
             query_feat = np.array(query_features["cls_token"])
             query_feat_norm = query_feat / (np.linalg.norm(query_feat) + 1e-8)
 
@@ -393,7 +377,7 @@ class DINOv3Service(BaseGeoModel):
             similarities = []
             for idx, candidate in enumerate(candidate_images):
                 try:
-                    cand_features = self.extract_features(candidate)
+                    cand_features = self.extract_features(candidate, **kwargs)
                     cand_feat = np.array(cand_features["cls_token"])
                     cand_feat_norm = cand_feat / (np.linalg.norm(cand_feat) + 1e-8)
 
