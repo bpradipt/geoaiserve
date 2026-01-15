@@ -20,7 +20,7 @@ class DINOv3Service(BaseGeoModel):
 
     def __init__(
         self,
-        model_name: str = "facebook/dinov2-base",
+        model_name: str = "facebook/dinov2-large",
         device: DeviceType = DeviceType.CPU,
         **kwargs: Any,
     ):

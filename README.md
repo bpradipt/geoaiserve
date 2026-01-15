@@ -52,7 +52,7 @@ GEOAI_MODELS=sam,moondream,dinov3
 DEVICE=cpu  # or cuda, mps
 SAM_MODEL_NAME=facebook/sam-vit-huge
 MOONDREAM_MODEL_NAME=vikhyatk/moondream2
-DINOV3_MODEL_NAME=facebook/dinov2-base
+DINOV3_MODEL_NAME=facebook/dinov2-large
 
 # Storage
 STORAGE_BACKEND=local
