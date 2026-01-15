@@ -2,19 +2,25 @@
 
 This document outlines the plan to integrate the [geoai](https://github.com/opengeos/geoai) library directly into geoaiserve, replacing the current custom implementations with wrappers around geoai's proven classes.
 
-## Current State
+## Status
 
-The current implementation uses:
-- **DINOv3**: HuggingFace `transformers` with `facebook/dinov2-base` (generic pre-trained weights)
-- **Moondream**: HuggingFace `transformers` with `vikhyatk/moondream2` (custom integration)
+- [x] **Phase 1: DINOv3 Integration** - Completed
+- [x] **Phase 2: Moondream Integration** - Completed
+- [ ] **Phase 3: Sliding Window Endpoints** - Future enhancement
+
+## Current State (After Integration)
+
+The implementation now uses:
+- **DINOv3**: geoai's `DINOv3GeoProcessor` with satellite-trained weights (SAT-493M)
+- **Moondream**: geoai's `MoondreamGeo` for vision-language inference
 - **SAM**: `samgeo` library (already aligned with geoai ecosystem)
 
-### Problems with Current Approach
+### Benefits Achieved
 
-1. **DINOv3 uses generic weights**: Not optimized for satellite imagery
-2. **Different normalization**: Uses ImageNet stats instead of satellite-specific stats
-3. **Missing features**: No sliding window, limited GeoTIFF support
-4. **Inconsistent with geoai**: Users expect geoai behavior
+1. **Satellite-optimized weights**: DINOv3 now uses SAT-493M trained weights
+2. **Proper normalization**: Uses satellite-specific image normalization stats
+3. **Higher resolution features**: 1024-dim features (ViT-L) vs 768-dim (ViT-B)
+4. **Consistent with geoai**: Users get expected geoai behavior
 
 ## Proposed Architecture
 
