@@ -13,6 +13,14 @@ try:
 except ImportError:
     ML_AVAILABLE = False
 
+# Check if geoai is available
+try:
+    import geoai
+
+    GEOAI_AVAILABLE = True
+except ImportError:
+    GEOAI_AVAILABLE = False
+
 # Check if samgeo is available
 try:
     import samgeo
@@ -35,6 +43,11 @@ skip_without_samgeo = pytest.mark.skipif(
 skip_without_torch = pytest.mark.skipif(
     not ML_AVAILABLE,
     reason="PyTorch not installed. Install with: uv sync --group ml",
+)
+
+skip_without_geoai = pytest.mark.skipif(
+    not GEOAI_AVAILABLE,
+    reason="geoai not installed. Install with: uv sync --group ml",
 )
 
 

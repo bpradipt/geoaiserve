@@ -15,7 +15,7 @@ from PIL import Image
 os.environ.setdefault("GEOAI_ALLOW_MOCK", "1")
 
 from geoaiserve.main import app
-from tests.markers import ML_AVAILABLE, SAMGEO_AVAILABLE
+from tests.markers import GEOAI_AVAILABLE, ML_AVAILABLE, SAMGEO_AVAILABLE
 
 
 @pytest.fixture
@@ -243,10 +243,15 @@ def real_moondream_service():
     """Real Moondream model service (session-scoped for efficiency).
 
     Returns:
-        MoondreamService instance with real model or None if not available
+        MoondreamService instance with real model
+
+    Raises:
+        pytest.skip: If ML or geoai dependencies are not available
     """
     if not ML_AVAILABLE:
-        return None
+        pytest.skip("ML dependencies not available. Install with: uv sync --group ml")
+    if not GEOAI_AVAILABLE:
+        pytest.skip("geoai not available. Install with: uv sync --group ml")
 
     from geoaiserve.models.moondream_service import MoondreamService
     from geoaiserve.schemas.common import DeviceType
@@ -263,10 +268,15 @@ def real_dinov3_service():
     """Real DINOv3 model service (session-scoped for efficiency).
 
     Returns:
-        DINOv3Service instance with real model or None if not available
+        DINOv3Service instance with real model
+
+    Raises:
+        pytest.skip: If ML or geoai dependencies are not available
     """
     if not ML_AVAILABLE:
-        return None
+        pytest.skip("ML dependencies not available. Install with: uv sync --group ml")
+    if not GEOAI_AVAILABLE:
+        pytest.skip("geoai not available. Install with: uv sync --group ml")
 
     from geoaiserve.models.dinov3_service import DINOv3Service
     from geoaiserve.schemas.common import DeviceType
