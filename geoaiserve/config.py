@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     # Model Paths (HuggingFace model identifiers)
     sam_model_name: str = "facebook/sam-vit-huge"
     moondream_model_name: str = "vikhyatk/moondream2"
-    dinov3_model_name: str = "facebook/dinov2-large"
+    dinov3_model_name: str = "facebook/dinov2-base"
 
     # Storage Configuration
     storage_backend: Literal["local", "s3", "gcs"] = "local"
