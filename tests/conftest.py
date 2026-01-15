@@ -15,7 +15,21 @@ from PIL import Image
 os.environ.setdefault("GEOAI_ALLOW_MOCK", "1")
 
 from geoaiserve.main import app
+from geoaiserve.schemas.common import DeviceType
 from tests.markers import GEOAI_AVAILABLE, ML_AVAILABLE, SAMGEO_AVAILABLE
+
+
+def get_device_from_env() -> DeviceType:
+    """Get device type from DEVICE environment variable.
+
+    Returns:
+        DeviceType from env var, defaults to CPU if not set or invalid
+    """
+    device_str = os.environ.get("DEVICE", "cpu").lower()
+    try:
+        return DeviceType(device_str)
+    except ValueError:
+        return DeviceType.CPU
 
 
 @pytest.fixture
@@ -229,10 +243,10 @@ def real_sam_service():
         return None
 
     from geoaiserve.models.sam_service import SAMService
-    from geoaiserve.schemas.common import DeviceType
 
+    device = get_device_from_env()
     # Explicitly disable mock to ensure real model is used
-    service = SAMService(device=DeviceType.CPU, allow_mock=False)
+    service = SAMService(device=device, allow_mock=False)
     service.load()
     yield service
     service.unload()
@@ -254,10 +268,10 @@ def real_moondream_service():
         pytest.skip("geoai not available. Install with: uv sync --group ml")
 
     from geoaiserve.models.moondream_service import MoondreamService
-    from geoaiserve.schemas.common import DeviceType
 
+    device = get_device_from_env()
     # Explicitly disable mock to ensure real model is used
-    service = MoondreamService(device=DeviceType.CPU, allow_mock=False)
+    service = MoondreamService(device=device, allow_mock=False)
     service.load()
     yield service
     service.unload()
@@ -279,10 +293,10 @@ def real_dinov3_service():
         pytest.skip("geoai not available. Install with: uv sync --group ml")
 
     from geoaiserve.models.dinov3_service import DINOv3Service
-    from geoaiserve.schemas.common import DeviceType
 
+    device = get_device_from_env()
     # Explicitly disable mock to ensure real model is used
-    service = DINOv3Service(device=DeviceType.CPU, allow_mock=False)
+    service = DINOv3Service(device=device, allow_mock=False)
     service.load()
     yield service
     service.unload()
