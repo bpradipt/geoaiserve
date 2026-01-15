@@ -70,6 +70,19 @@ class TestRealDINOv3Service:
         assert "cls_token" in result
         assert "patch_features" in result
 
+    def test_patch_grid_dimensions(self, real_dinov3_service):
+        """Should return correct patch grid dimensions."""
+        img = Image.new("RGB", (224, 224), color="cyan")
+
+        result = real_dinov3_service.extract_features(img)
+
+        assert "patch_grid" in result
+        assert result["patch_grid"] is not None
+        assert len(result["patch_grid"]) == 2
+        # DINOv2 uses 14x14 patches, 224/14 = 16 patches per side
+        assert result["patch_grid"][0] == 16
+        assert result["patch_grid"][1] == 16
+
     def test_compute_similarity(self, real_dinov3_service):
         """Should compute similarity between two images."""
         img1 = Image.new("RGB", (224, 224), color="red")
@@ -142,6 +155,65 @@ class TestDINOv3FeatureConsistency:
         # Results are sorted by similarity (descending)
         top_match = result["similarities"][0]
         assert top_match["index"] == 0  # Red image should be first
+
+
+@skip_without_ml
+class TestDINOv3PatchSimilarity:
+    """Tests for DINOv3 patch similarity computation."""
+
+    def test_query_patch_has_max_similarity(self, real_dinov3_service):
+        """Query patch should have similarity 1.0 with itself."""
+        img = Image.new("RGB", (224, 224), color="blue")
+
+        # Query center of image (112, 112)
+        result = real_dinov3_service.compute_patch_similarity(
+            img, query_points=[[112, 112]]
+        )
+
+        assert "similarity_maps" in result
+        assert len(result["similarity_maps"]) == 1
+
+        sim_map = np.array(result["similarity_maps"][0])
+        # The center patch should have max similarity (1.0)
+        # Center of 16x16 grid is around (8, 8)
+        center_x, center_y = 8, 8
+        max_sim = sim_map.max()
+        center_sim = sim_map[center_y, center_x]
+
+        # Center should have the highest or near-highest similarity
+        assert center_sim > 0.99, f"Center similarity should be ~1.0, got {center_sim}"
+
+    def test_similarity_map_dimensions(self, real_dinov3_service):
+        """Similarity maps should match patch grid dimensions."""
+        img = Image.new("RGB", (224, 224), color="green")
+
+        result = real_dinov3_service.compute_patch_similarity(
+            img, query_points=[[50, 50]]
+        )
+
+        assert "map_size" in result
+        assert result["map_size"] == [16, 16]
+
+        sim_map = np.array(result["similarity_maps"][0])
+        assert sim_map.shape == (16, 16)
+
+    def test_multiple_query_points(self, real_dinov3_service):
+        """Should handle multiple query points correctly."""
+        img = Image.new("RGB", (224, 224), color="red")
+
+        result = real_dinov3_service.compute_patch_similarity(
+            img, query_points=[[50, 50], [150, 150], [100, 200]]
+        )
+
+        assert len(result["similarity_maps"]) == 3
+        assert len(result["query_points"]) == 3
+
+        for sim_map in result["similarity_maps"]:
+            sim_array = np.array(sim_map)
+            assert sim_array.shape == (16, 16)
+            # Similarity values should be between -1 and 1
+            assert sim_array.min() >= -1.0
+            assert sim_array.max() <= 1.0
 
 
 @skip_without_ml
