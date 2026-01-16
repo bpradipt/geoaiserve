@@ -26,10 +26,10 @@ dev = [
 ]
 
 ml = [
-    "geoai-py>=0.1.0",
+    "geoai-py>=0.25.0",
     "torch>=2.0.0",
     "torchvision>=0.15.0",
-    "transformers>=4.30.0,<4.50.0",
+    "transformers>=4.57.1",
     "segment-anything-py",
     "einops>=0.8.1",
 ]

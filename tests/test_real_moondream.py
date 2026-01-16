@@ -290,8 +290,8 @@ class TestMoondreamDetect:
         assert "object_type" in result
         assert "detections" in result
         assert result["object_type"] == "car"
-        # Detections should be a dict (possibly with empty objects list)
-        assert isinstance(result["detections"], dict)
+        # Detections should be a list of bounding boxes
+        assert isinstance(result["detections"], list)
 
     def test_detect_cars(
         self, real_moondream_service, parking_lot_image: Image.Image | None
@@ -304,8 +304,8 @@ class TestMoondreamDetect:
 
         assert "detections" in result
         assert result["detections"] is not None
-        # Should have objects key even if empty
-        assert "objects" in result["detections"]
+        # Detections is a list of bounding box dicts
+        assert isinstance(result["detections"], list)
 
     def test_detect_buildings(
         self, real_moondream_service, parking_lot_image: Image.Image | None
@@ -318,7 +318,7 @@ class TestMoondreamDetect:
 
         assert "detections" in result
         assert result["object_type"] == "building"
-        assert isinstance(result["detections"], dict)
+        assert isinstance(result["detections"], list)
 
     def test_detect_vehicles(
         self, real_moondream_service, parking_lot_image: Image.Image | None
@@ -331,7 +331,7 @@ class TestMoondreamDetect:
 
         assert "detections" in result
         assert result["object_type"] == "vehicle"
-        assert isinstance(result["detections"], dict)
+        assert isinstance(result["detections"], list)
 
 
 # =============================================================================
@@ -432,4 +432,4 @@ class TestMoondreamEdgeCases:
 
         assert "detections" in result
         # Should return valid structure even for non-existent objects
-        assert isinstance(result["detections"], dict)
+        assert isinstance(result["detections"], list)
