@@ -2,6 +2,8 @@
 
 A FastAPI-based REST API for geospatial AI model inference, providing endpoints for image segmentation, vision-language tasks, feature extraction, and more.
 
+This relies on [GeoAI APIs](https://github.com/opengeos/geoai). Kudos to the developers.
+
 ## Features
 
 - **Multiple Model Support**: SAM, Moondream, DINOv3, GroundedSAM, Detectron2, TIMM
@@ -362,10 +364,6 @@ The API follows a unified gateway pattern with:
 
 Models are loaded lazily on first request and cached for subsequent requests.
 
-## License
-
-[Add your license here]
-
 ## Contributing
 
-[Add contribution guidelines here]
+Contributions are most welcome. Please open a PR
