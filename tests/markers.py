@@ -21,9 +21,9 @@ try:
 except ImportError:
     GEOAI_AVAILABLE = False
 
-# Check if samgeo is available
+# Check if segment-geospatial (samgeo3) is available
 try:
-    import samgeo
+    from samgeo.samgeo3 import SamGeo3
 
     SAMGEO_AVAILABLE = True
 except ImportError:
@@ -37,7 +37,7 @@ skip_without_ml = pytest.mark.skipif(
 
 skip_without_samgeo = pytest.mark.skipif(
     not SAMGEO_AVAILABLE,
-    reason="samgeo not installed. Install with: pip install samgeo",
+    reason="segment-geospatial not installed. Install with: pip install 'segment-geospatial[samgeo3]'",
 )
 
 skip_without_torch = pytest.mark.skipif(

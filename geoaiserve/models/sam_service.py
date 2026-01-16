@@ -1,4 +1,4 @@
-"""SAM (Segment Anything Model) service implementation."""
+"""SAM (Segment Anything Model) service implementation using segment-geospatial."""
 
 from __future__ import annotations
 
@@ -16,24 +16,27 @@ logger = logging.getLogger(__name__)
 
 
 class SAMService(BaseGeoModel):
-    """Service for SAM (Segment Anything Model) inference."""
+    """Service for SAM (Segment Anything Model) inference using SamGeo3.
+
+    This service wraps segment-geospatial's SamGeo3 to provide geospatial
+    segmentation capabilities with SAM 2.1 model.
+    """
 
     def __init__(
         self,
-        model_name: str = "facebook/sam-vit-huge",
+        model_name: str = "sam2.1-hiera-large",
         device: DeviceType = DeviceType.CPU,
         **kwargs: Any,
     ):
         """Initialize SAM service.
 
         Args:
-            model_name: HuggingFace model identifier
+            model_name: SAM model variant (sam2.1-hiera-large, sam2.1-hiera-base, etc.)
             device: Device to run inference on
             **kwargs: Additional model parameters
         """
         super().__init__(model_name, device, **kwargs)
-        self.checkpoint = kwargs.get("checkpoint")
-        self._sam_variant = kwargs.get("sam_model_type", "vit_h")
+        self._current_image_path: str | None = None
 
     @property
     def model_type(self) -> ModelType:
@@ -68,21 +71,21 @@ class SAMService(BaseGeoModel):
         try:
             logger.info(f"Loading SAM model: {self.model_name} on {self.device}")
 
-            from samgeo import SamGeo
+            from samgeo.samgeo3 import SamGeo3
 
-            # Initialize SAM model
-            self._model = SamGeo(
-                model_type=self._sam_variant,
-                checkpoint=self.checkpoint,
-                device=self.device.value,
+            # Initialize SamGeo3 with meta backend for interactive segmentation
+            self._model = SamGeo3(
+                model_id=self.model_name,
+                backend="meta",
+                enable_inst_interactivity=True,
             )
             self._loaded = True
             logger.info(f"SAM model loaded successfully: {self.model_name}")
 
         except ImportError as e:
             raise ImportError(
-                f"Required dependency 'samgeo' not installed for SAM. "
-                f"Install with: pip install samgeo"
+                "Required dependency 'segment-geospatial' not installed for SAM. "
+                "Install with: pip install 'segment-geospatial[samgeo3]'"
             ) from e
         except Exception as e:
             logger.error(f"Failed to load SAM model: {e}")
@@ -92,16 +95,35 @@ class SAMService(BaseGeoModel):
         """Create a mock model for testing when actual model is not available."""
 
         class MockSAM:
-            def generate(self, source, output, **kwargs):
-                logger.info("Mock SAM: generate called")
-                return {"status": "mock", "message": "SAM model not installed"}
+            def __init__(self):
+                self._image_set = False
 
-            def predict(self, source, point_coords=None, point_labels=None, **kwargs):
-                logger.info("Mock SAM: predict called")
+            def set_image(self, source):
+                logger.info(f"Mock SAM: set_image called with {source}")
+                self._image_set = True
+
+            def generate_masks_by_points_inst(
+                self, point_coords=None, point_labels=None, **kwargs
+            ):
+                logger.info("Mock SAM: generate_masks_by_points_inst called")
                 return {
                     "masks": np.array([[[1, 0], [0, 1]]]),
                     "scores": np.array([0.95]),
                 }
+
+            def generate_masks_by_boxes_inst(self, boxes=None, **kwargs):
+                logger.info("Mock SAM: generate_masks_by_boxes_inst called")
+                return {
+                    "masks": np.array([[[1, 0], [0, 1]]]),
+                    "scores": np.array([0.95]),
+                }
+
+            def generate(self, source, output=None, **kwargs):
+                logger.info("Mock SAM: generate called")
+                return {"status": "mock", "message": "SAM model not installed"}
+
+            def save_masks(self, output, **kwargs):
+                logger.info(f"Mock SAM: save_masks called with output={output}")
 
         return MockSAM()
 
@@ -110,7 +132,16 @@ class SAMService(BaseGeoModel):
         if self._loaded:
             logger.info(f"Unloading SAM model: {self.model_name}")
             self._model = None
+            self._current_image_path = None
             self._loaded = False
+
+    def _set_image_if_needed(self, image_path: Path | str) -> None:
+        """Set image on the model if it's different from current."""
+        image_path_str = str(image_path)
+        if self._current_image_path != image_path_str:
+            logger.info(f"Setting image: {image_path_str}")
+            self._model.set_image(image_path_str)
+            self._current_image_path = image_path_str
 
     def predict(
         self,
@@ -118,13 +149,13 @@ class SAMService(BaseGeoModel):
         point_coords: list[list[float]] | None = None,
         point_labels: list[int] | None = None,
         boxes: list[list[float]] | None = None,
-        multimask_output: bool = True,
+        multimask_output: bool = False,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        """Run prompt-based segmentation.
+        """Run prompt-based segmentation using SamGeo3.
 
         Args:
-            image_path: Path to input image
+            image_path: Path to input image (GeoTIFF supported)
             point_coords: Point prompts [[x, y], ...]
             point_labels: Point labels [1=foreground, 0=background]
             boxes: Box prompts [[x1, y1, x2, y2], ...]
@@ -140,29 +171,52 @@ class SAMService(BaseGeoModel):
         try:
             logger.info(f"Running SAM prediction on {image_path}")
 
-            # Convert inputs to numpy arrays if provided
-            if point_coords is not None:
-                point_coords = np.array(point_coords)
-            if point_labels is not None:
-                point_labels = np.array(point_labels)
+            # Set the image on the model
+            self._set_image_if_needed(image_path)
+
+            # Use box prompts if provided
             if boxes is not None:
-                boxes = np.array(boxes)
+                logger.info(f"Using box prompts: {boxes}")
+                result = self._model.generate_masks_by_boxes_inst(
+                    boxes=boxes,
+                    multimask_output=multimask_output,
+                    **kwargs,
+                )
+            # Use point prompts if provided
+            elif point_coords is not None:
+                logger.info(f"Using point prompts: {point_coords}")
 
-            # Run prediction
-            result = self._model.predict(
-                source=str(image_path),
-                point_coords=point_coords,
-                point_labels=point_labels,
-                boxes=boxes,
-                multimask_output=multimask_output,
-                **kwargs,
-            )
+                # Convert inputs to numpy arrays
+                np_point_coords = np.array(point_coords)
+                np_point_labels = (
+                    np.array(point_labels)
+                    if point_labels is not None
+                    else np.ones(len(point_coords), dtype=np.int32)
+                )
 
-            return {
-                "masks": result.get("masks"),
-                "scores": result.get("scores"),
-                "logits": result.get("logits"),
-            }
+                result = self._model.generate_masks_by_points_inst(
+                    point_coords=np_point_coords,
+                    point_labels=np_point_labels,
+                    multimask_output=multimask_output,
+                    **kwargs,
+                )
+            else:
+                raise ValueError("Either point_coords or boxes must be provided")
+
+            # Handle different result formats
+            if isinstance(result, dict):
+                return {
+                    "masks": result.get("masks"),
+                    "scores": result.get("scores"),
+                    "logits": result.get("logits"),
+                }
+            else:
+                # If result is the masks directly
+                return {
+                    "masks": result,
+                    "scores": None,
+                    "logits": None,
+                }
 
         except Exception as e:
             logger.error(f"SAM prediction failed: {e}")
