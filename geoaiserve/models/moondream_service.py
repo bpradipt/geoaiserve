@@ -59,38 +59,37 @@ class MoondreamService(BaseGeoModel):
             logger.info(f"Moondream model already loaded: {self.model_name}")
             return
 
+        # Use mock model if explicitly requested via GEOAI_ALLOW_MOCK
+        if self._allow_mock:
+            logger.info(
+                "GEOAI_ALLOW_MOCK is set. Creating mock Moondream service."
+            )
+            self._model = self._create_mock_model()
+            self._processor = None
+            self._is_mock = True
+            self._loaded = True
+            return
+
         try:
             logger.info(f"Loading Moondream model: {self.model_name} on {self.device}")
 
-            try:
-                from geoai import MoondreamGeo
+            from geoai import MoondreamGeo
 
-                device_str = self.device.value if self.device else "cpu"
-                self._processor = MoondreamGeo(
-                    model_name=self.model_name,
-                    revision=self.revision,
-                    device=device_str,
-                )
-                self._model = self._processor
-                self._loaded = True
-                logger.info(f"Moondream model loaded successfully via geoai: {self.model_name}")
+            device_str = self.device.value if self.device else "cpu"
+            self._processor = MoondreamGeo(
+                model_name=self.model_name,
+                revision=self.revision,
+                device=device_str,
+            )
+            self._model = self._processor
+            self._loaded = True
+            logger.info(f"Moondream model loaded successfully via geoai: {self.model_name}")
 
-            except ImportError as e:
-                if self._allow_mock:
-                    logger.warning(
-                        "geoai not installed. Creating mock Moondream service. "
-                        "Set allow_mock=False or unset GEOAI_ALLOW_MOCK to require real model."
-                    )
-                    self._model = self._create_mock_model()
-                    self._processor = None
-                    self._is_mock = True
-                    self._loaded = True
-                else:
-                    raise ImportError(
-                        f"Required dependency 'geoai' not installed for Moondream. "
-                        f"Install with: uv sync --group ml"
-                    ) from e
-
+        except ImportError as e:
+            raise ImportError(
+                f"Required dependency 'geoai' not installed for Moondream. "
+                f"Install with: uv sync --group ml"
+            ) from e
         except Exception as e:
             logger.error(f"Failed to load Moondream model: {e}")
             raise

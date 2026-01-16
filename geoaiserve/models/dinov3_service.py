@@ -68,37 +68,36 @@ class DINOv3Service(BaseGeoModel):
             logger.info(f"DINOv3 model already loaded: {self.model_name}")
             return
 
+        # Use mock model if explicitly requested via GEOAI_ALLOW_MOCK
+        if self._allow_mock:
+            logger.info(
+                "GEOAI_ALLOW_MOCK is set. Creating mock DINOv3 service."
+            )
+            self._model = self._create_mock_model()
+            self._processor = None
+            self._is_mock = True
+            self._loaded = True
+            return
+
         try:
             logger.info(f"Loading DINOv3 model: {self.model_name} on {self.device}")
 
-            try:
-                from geoai import DINOv3GeoProcessor
+            from geoai import DINOv3GeoProcessor
 
-                device = self._get_torch_device()
-                self._processor = DINOv3GeoProcessor(
-                    model_name=self.model_name,
-                    device=device,
-                )
-                self._model = self._processor
-                self._loaded = True
-                logger.info(f"DINOv3 model loaded successfully via geoai: {self.model_name}")
+            device = self._get_torch_device()
+            self._processor = DINOv3GeoProcessor(
+                model_name=self.model_name,
+                device=device,
+            )
+            self._model = self._processor
+            self._loaded = True
+            logger.info(f"DINOv3 model loaded successfully via geoai: {self.model_name}")
 
-            except ImportError as e:
-                if self._allow_mock:
-                    logger.warning(
-                        "geoai not installed. Creating mock DINOv3 service. "
-                        "Set allow_mock=False or unset GEOAI_ALLOW_MOCK to require real model."
-                    )
-                    self._model = self._create_mock_model()
-                    self._processor = None
-                    self._is_mock = True
-                    self._loaded = True
-                else:
-                    raise ImportError(
-                        f"Required dependency 'geoai' not installed for DINOv3. "
-                        f"Install with: uv sync --group ml"
-                    ) from e
-
+        except ImportError as e:
+            raise ImportError(
+                f"Required dependency 'geoai' not installed for DINOv3. "
+                f"Install with: uv sync --group ml"
+            ) from e
         except Exception as e:
             logger.error(f"Failed to load DINOv3 model: {e}")
             raise

@@ -55,37 +55,35 @@ class SAMService(BaseGeoModel):
             logger.info(f"SAM model already loaded: {self.model_name}")
             return
 
+        # Use mock model if explicitly requested via GEOAI_ALLOW_MOCK
+        if self._allow_mock:
+            logger.info(
+                "GEOAI_ALLOW_MOCK is set. Creating mock SAM service."
+            )
+            self._model = self._create_mock_model()
+            self._is_mock = True
+            self._loaded = True
+            return
+
         try:
             logger.info(f"Loading SAM model: {self.model_name} on {self.device}")
 
-            # Import here to avoid dependency issues if not installed
-            try:
-                from samgeo import SamGeo
+            from samgeo import SamGeo
 
-                # Initialize SAM model
-                self._model = SamGeo(
-                    model_type=self._sam_variant,
-                    checkpoint=self.checkpoint,
-                    device=self.device.value,
-                )
-                self._loaded = True
-                logger.info(f"SAM model loaded successfully: {self.model_name}")
+            # Initialize SAM model
+            self._model = SamGeo(
+                model_type=self._sam_variant,
+                checkpoint=self.checkpoint,
+                device=self.device.value,
+            )
+            self._loaded = True
+            logger.info(f"SAM model loaded successfully: {self.model_name}")
 
-            except ImportError as e:
-                if self._allow_mock:
-                    logger.warning(
-                        "samgeo not installed. Creating mock SAM service. "
-                        "Set allow_mock=False or unset GEOAI_ALLOW_MOCK to require real model."
-                    )
-                    self._model = self._create_mock_model()
-                    self._is_mock = True
-                    self._loaded = True
-                else:
-                    raise ImportError(
-                        f"Required dependency 'samgeo' not installed for SAM. "
-                        f"Install with: pip install samgeo"
-                    ) from e
-
+        except ImportError as e:
+            raise ImportError(
+                f"Required dependency 'samgeo' not installed for SAM. "
+                f"Install with: pip install samgeo"
+            ) from e
         except Exception as e:
             logger.error(f"Failed to load SAM model: {e}")
             raise
