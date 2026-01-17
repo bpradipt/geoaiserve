@@ -47,9 +47,10 @@ class SAMService(BaseGeoModel):
     def supported_tasks(self) -> list[str]:
         """Return list of supported tasks."""
         return [
-            "automatic_mask_generation",
-            "prompt_based_segmentation",
-            "batch_processing",
+            "text_prompted_segmentation",  # generate_masks(prompt="tree")
+            "point_based_segmentation",    # predict(point_coords=...)
+            "box_based_segmentation",      # predict(boxes=...) or generate_masks_by_boxes()
+            "batch_processing",            # predict_batch()
         ]
 
     def load(self) -> None:
@@ -73,10 +74,14 @@ class SAMService(BaseGeoModel):
 
             from samgeo.samgeo3 import SamGeo3
 
+            # Convert device to string format
+            device_str = "cuda" if self.device == DeviceType.CUDA else "cpu"
+
             # Initialize SamGeo3 with meta backend for interactive segmentation
             self._model = SamGeo3(
                 model_id=self.model_name,
                 backend="meta",
+                device=device_str,
                 enable_inst_interactivity=True,
             )
             self._loaded = True
@@ -98,29 +103,44 @@ class SAMService(BaseGeoModel):
             def __init__(self):
                 self._image_set = False
 
-            def set_image(self, source):
+            def set_image(self, source, bands=None):
                 logger.info(f"Mock SAM: set_image called with {source}")
                 self._image_set = True
 
-            def generate_masks_by_points_inst(
-                self, point_coords=None, point_labels=None, **kwargs
+            def predict_inst(
+                self,
+                point_coords=None,
+                point_labels=None,
+                box=None,
+                mask_input=None,
+                multimask_output=True,
+                return_logits=False,
+                normalize_coords=True,
+                point_crs=None,
+                box_crs=None,
             ):
-                logger.info("Mock SAM: generate_masks_by_points_inst called")
-                return {
-                    "masks": np.array([[[1, 0], [0, 1]]]),
-                    "scores": np.array([0.95]),
-                }
+                """Mock predict_inst returning (masks, scores, logits) tuple."""
+                logger.info("Mock SAM: predict_inst called")
+                masks = np.array([[[1, 0], [0, 1]]])
+                scores = np.array([0.95])
+                logits = np.array([[[0.1, -0.1], [-0.1, 0.1]]])
+                return masks, scores, logits
 
-            def generate_masks_by_boxes_inst(self, boxes=None, **kwargs):
+            def generate_masks_by_boxes_inst(
+                self, boxes=None, box_crs=None, output=None, **kwargs
+            ):
+                """Mock generate_masks_by_boxes_inst returning dict."""
                 logger.info("Mock SAM: generate_masks_by_boxes_inst called")
                 return {
                     "masks": np.array([[[1, 0], [0, 1]]]),
                     "scores": np.array([0.95]),
+                    "num_masks": 1,
                 }
 
-            def generate(self, source, output=None, **kwargs):
-                logger.info("Mock SAM: generate called")
-                return {"status": "mock", "message": "SAM model not installed"}
+            def generate_masks(self, prompt, min_size=0, max_size=None, **kwargs):
+                """Mock generate_masks for text-based segmentation."""
+                logger.info(f"Mock SAM: generate_masks called with prompt={prompt}")
+                return [{"mask": np.array([[1, 0], [0, 1]]), "score": 0.95}]
 
             def save_masks(self, output, **kwargs):
                 logger.info(f"Mock SAM: save_masks called with output={output}")
@@ -149,21 +169,28 @@ class SAMService(BaseGeoModel):
         point_coords: list[list[float]] | None = None,
         point_labels: list[int] | None = None,
         boxes: list[list[float]] | None = None,
-        multimask_output: bool = False,
+        multimask_output: bool = True,
+        point_crs: str | None = None,
+        box_crs: str | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
         """Run prompt-based segmentation using SamGeo3.
+
+        Uses predict_inst for point/box prompts (SAM1-style interactive segmentation).
+        See: https://samgeo.gishub.org/examples/sam3_box_prompts/
 
         Args:
             image_path: Path to input image (GeoTIFF supported)
             point_coords: Point prompts [[x, y], ...]
             point_labels: Point labels [1=foreground, 0=background]
-            boxes: Box prompts [[x1, y1, x2, y2], ...]
-            multimask_output: Whether to output multiple masks
+            boxes: Box prompts [[x1, y1, x2, y2], ...] or single box [x1, y1, x2, y2]
+            multimask_output: Whether to output multiple masks per prompt
+            point_crs: CRS for point coordinates (e.g., "EPSG:4326")
+            box_crs: CRS for box coordinates (e.g., "EPSG:4326")
             **kwargs: Additional parameters
 
         Returns:
-            Dictionary containing masks, scores, and metadata
+            Dictionary containing masks, scores, and logits
         """
         if not self._loaded:
             self.load()
@@ -174,49 +201,45 @@ class SAMService(BaseGeoModel):
             # Set the image on the model
             self._set_image_if_needed(image_path)
 
-            # Use box prompts if provided
-            if boxes is not None:
-                logger.info(f"Using box prompts: {boxes}")
-                result = self._model.generate_masks_by_boxes_inst(
-                    boxes=boxes,
-                    multimask_output=multimask_output,
-                    **kwargs,
-                )
-            # Use point prompts if provided
-            elif point_coords is not None:
-                logger.info(f"Using point prompts: {point_coords}")
+            # Use predict_inst for both point and box prompts
+            # This is the SAM1-style interactive segmentation API
+            if point_coords is not None or boxes is not None:
+                # Prepare point coordinates
+                np_point_coords = None
+                np_point_labels = None
+                if point_coords is not None:
+                    logger.info(f"Using point prompts: {point_coords}")
+                    np_point_coords = np.array(point_coords)
+                    np_point_labels = (
+                        np.array(point_labels)
+                        if point_labels is not None
+                        else np.ones(len(point_coords), dtype=np.int32)
+                    )
 
-                # Convert inputs to numpy arrays
-                np_point_coords = np.array(point_coords)
-                np_point_labels = (
-                    np.array(point_labels)
-                    if point_labels is not None
-                    else np.ones(len(point_coords), dtype=np.int32)
-                )
+                # Prepare box coordinates
+                np_box = None
+                if boxes is not None:
+                    logger.info(f"Using box prompts: {boxes}")
+                    np_box = np.array(boxes)
 
-                result = self._model.generate_masks_by_points_inst(
+                # Call predict_inst which returns (masks, scores, logits) tuple
+                masks, scores, logits = self._model.predict_inst(
                     point_coords=np_point_coords,
                     point_labels=np_point_labels,
+                    box=np_box,
                     multimask_output=multimask_output,
+                    point_crs=point_crs,
+                    box_crs=box_crs,
                     **kwargs,
                 )
+
+                return {
+                    "masks": masks,
+                    "scores": scores,
+                    "logits": logits,
+                }
             else:
                 raise ValueError("Either point_coords or boxes must be provided")
-
-            # Handle different result formats
-            if isinstance(result, dict):
-                return {
-                    "masks": result.get("masks"),
-                    "scores": result.get("scores"),
-                    "logits": result.get("logits"),
-                }
-            else:
-                # If result is the masks directly
-                return {
-                    "masks": result,
-                    "scores": None,
-                    "logits": None,
-                }
 
         except Exception as e:
             logger.error(f"SAM prediction failed: {e}")
@@ -225,26 +248,24 @@ class SAMService(BaseGeoModel):
     def generate_masks(
         self,
         image_path: Path | str,
+        prompt: str = "object",
         output_path: Path | str | None = None,
-        points_per_side: int = 32,
-        pred_iou_thresh: float = 0.88,
-        stability_score_thresh: float = 0.95,
-        crop_n_layers: int = 0,
-        crop_n_points_downscale_factor: int = 1,
-        min_mask_region_area: int = 0,
+        min_size: int = 0,
+        max_size: int | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        """Run automatic mask generation.
+        """Run text-prompted mask generation using SAM3.
+
+        SAM3 uses text prompts to segment objects, unlike SAM2 which uses
+        grid-based point sampling.
+        See: https://samgeo.gishub.org/examples/sam3_box_prompts/
 
         Args:
             image_path: Path to input image
-            output_path: Path to save output
-            points_per_side: Number of points per side for sampling
-            pred_iou_thresh: IoU threshold for mask prediction
-            stability_score_thresh: Stability score threshold
-            crop_n_layers: Number of crop layers
-            crop_n_points_downscale_factor: Downscale factor for points
-            min_mask_region_area: Minimum mask region area
+            prompt: Text prompt describing what to segment (e.g., "tree", "building")
+            output_path: Path to save output masks
+            min_size: Minimum mask size in pixels
+            max_size: Maximum mask size in pixels
             **kwargs: Additional parameters
 
         Returns:
@@ -254,33 +275,107 @@ class SAMService(BaseGeoModel):
             self.load()
 
         try:
-            logger.info(f"Running SAM automatic mask generation on {image_path}")
+            logger.info(
+                f"Running SAM3 text-prompted mask generation on {image_path} "
+                f"with prompt='{prompt}'"
+            )
 
-            # Run automatic mask generation
-            self._model.generate(
-                source=str(image_path),
-                output=str(output_path) if output_path else None,
-                points_per_side=points_per_side,
-                pred_iou_thresh=pred_iou_thresh,
-                stability_score_thresh=stability_score_thresh,
-                crop_n_layers=crop_n_layers,
-                crop_n_points_downscale_factor=crop_n_points_downscale_factor,
-                min_mask_region_area=min_mask_region_area,
+            # Set the image on the model
+            self._set_image_if_needed(image_path)
+
+            # Run text-prompted mask generation (SAM3 API)
+            masks = self._model.generate_masks(
+                prompt=prompt,
+                min_size=min_size,
+                max_size=max_size,
                 **kwargs,
             )
 
+            # Save masks if output path provided
+            if output_path:
+                self._model.save_masks(output=str(output_path))
+
             return {
                 "status": "success",
+                "masks": masks,
                 "output_path": str(output_path) if output_path else None,
                 "params": {
-                    "points_per_side": points_per_side,
-                    "pred_iou_thresh": pred_iou_thresh,
-                    "stability_score_thresh": stability_score_thresh,
+                    "prompt": prompt,
+                    "min_size": min_size,
+                    "max_size": max_size,
                 },
             }
 
         except Exception as e:
             logger.error(f"SAM mask generation failed: {e}")
+            raise
+
+    def generate_masks_by_boxes(
+        self,
+        image_path: Path | str,
+        boxes: list[list[float]] | str,
+        box_crs: str | None = None,
+        output_path: Path | str | None = None,
+        multimask_output: bool = False,
+        min_size: int = 0,
+        max_size: int | None = None,
+        dtype: str = "uint8",
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Generate masks using bounding box prompts.
+
+        This is the recommended method for batch box-based segmentation.
+        See: https://samgeo.gishub.org/examples/sam3_box_prompts/
+
+        Args:
+            image_path: Path to input image (GeoTIFF supported)
+            boxes: Box prompts as [[xmin, ymin, xmax, ymax], ...] or path to
+                   vector file (GeoJSON, Shapefile, etc.)
+            box_crs: CRS for box coordinates (e.g., "EPSG:4326")
+            output_path: Path to save output masks
+            multimask_output: Whether to output multiple masks per box
+            min_size: Minimum mask size in pixels
+            max_size: Maximum mask size in pixels
+            dtype: Output data type for saved masks
+            **kwargs: Additional parameters
+
+        Returns:
+            Dictionary containing masks, scores, and metadata
+        """
+        if not self._loaded:
+            self.load()
+
+        try:
+            logger.info(f"Running SAM box-based mask generation on {image_path}")
+
+            # Set the image on the model
+            self._set_image_if_needed(image_path)
+
+            # Call generate_masks_by_boxes_inst (SAM3 API for batch box prompts)
+            result = self._model.generate_masks_by_boxes_inst(
+                boxes=boxes,
+                box_crs=box_crs,
+                output=str(output_path) if output_path else None,
+                multimask_output=multimask_output,
+                min_size=min_size,
+                max_size=max_size,
+                dtype=dtype,
+                **kwargs,
+            )
+
+            return {
+                "status": "success",
+                "masks": result.get("masks") if isinstance(result, dict) else result,
+                "scores": result.get("scores") if isinstance(result, dict) else None,
+                "output_path": str(output_path) if output_path else None,
+                "params": {
+                    "box_crs": box_crs,
+                    "multimask_output": multimask_output,
+                },
+            }
+
+        except Exception as e:
+            logger.error(f"SAM box mask generation failed: {e}")
             raise
 
     def predict_batch(
