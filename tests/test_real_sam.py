@@ -33,8 +33,9 @@ class TestRealSAMService:
     def test_supported_tasks(self, real_sam_service):
         """Should support expected tasks."""
         tasks = real_sam_service.supported_tasks
-        assert "automatic_mask_generation" in tasks
-        assert "prompt_based_segmentation" in tasks
+        assert "text_prompted_segmentation" in tasks
+        assert "point_based_segmentation" in tasks
+        assert "box_based_segmentation" in tasks
 
     def test_predict_with_geotiff(
         self, real_sam_service, sample_geotiff: Path | None
@@ -68,23 +69,25 @@ class TestRealSAMService:
         assert "masks" in result
         assert "scores" in result
 
-    def test_generate_masks_automatic(
+    def test_generate_masks_with_text_prompt(
         self, real_sam_service, sample_geotiff: Path | None, tmp_path: Path
     ):
-        """SAM should generate automatic masks."""
+        """SAM3 should generate masks using text prompts."""
         if sample_geotiff is None:
             pytest.skip("No GeoTIFF test files available")
 
-        output_path = tmp_path / "masks_output"
+        output_path = tmp_path / "masks_output.tif"
 
+        # SAM3 uses text prompts for segmentation
         result = real_sam_service.generate_masks(
             sample_geotiff,
+            prompt="object",  # Generic prompt for testing
             output_path=output_path,
-            points_per_side=16,  # Reduced for faster testing
         )
 
         assert result["status"] == "success"
         assert "params" in result
+        assert result["params"]["prompt"] == "object"
 
 
 @skip_without_samgeo
