@@ -621,7 +621,13 @@
         // Event Listeners Setup
         function setupEventListeners() {
             // File Upload
-            uploadZone.addEventListener('click', () => fileInput.click());
+            uploadZone.addEventListener('click', (e) => {
+                // Don't trigger if clicking on the file input itself
+                if (e.target !== fileInput) {
+                    console.log('Upload zone clicked, triggering file input');
+                    fileInput.click();
+                }
+            });
             uploadZone.addEventListener('dragover', handleDragOver);
             uploadZone.addEventListener('dragleave', handleDragLeave);
             uploadZone.addEventListener('drop', handleDrop);
@@ -680,25 +686,31 @@
         }
 
         function handleFileSelect(e) {
+            console.log('File select event triggered', e.target.files);
             if (e.target.files.length > 0) {
                 uploadFile(e.target.files[0]);
             }
         }
 
         async function uploadFile(file) {
+            console.log('uploadFile called with:', file.name, file.size);
             showLoading(true);
 
             try {
                 const formData = new FormData();
                 formData.append('file', file);
 
+                console.log('Sending upload request to:', `${API_BASE}/files/upload`);
                 const response = await fetch(`${API_BASE}/files/upload`, {
                     method: 'POST',
                     body: formData
                 });
+                console.log('Upload response status:', response.status);
 
                 if (!response.ok) {
-                    throw new Error(`Upload failed: ${response.statusText}`);
+                    const errorText = await response.text();
+                    console.error('Upload error response:', errorText);
+                    throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
                 }
 
                 const data = await response.json();
@@ -710,8 +722,8 @@
                 document.getElementById('fileSize').textContent = formatBytes(data.size);
                 fileInfo.classList.add('visible');
 
-                // Load image to canvas
-                loadImageToCanvas(file);
+                // Load image preview from server (handles GeoTIFF conversion)
+                loadImagePreview(data.file_id);
 
                 // Enable API buttons
                 enableApiButtons(true);
@@ -724,48 +736,106 @@
             }
         }
 
-        function loadImageToCanvas(file) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const img = new Image();
-                img.onload = () => {
-                    // Resize canvas to fit container while maintaining aspect ratio
-                    const container = canvasContainer;
-                    const maxWidth = container.clientWidth;
-                    const maxHeight = container.clientHeight;
+        function loadImagePreview(fileId) {
+            const img = new Image();
 
-                    let width = img.width;
-                    let height = img.height;
-
-                    if (width > maxWidth) {
-                        height = (maxWidth / width) * height;
-                        width = maxWidth;
-                    }
-                    if (height > maxHeight) {
-                        width = (maxHeight / height) * width;
-                        height = maxHeight;
-                    }
-
-                    // Set canvas sizes
-                    imageCanvas.width = width;
-                    imageCanvas.height = height;
-                    drawCanvas.width = width;
-                    drawCanvas.height = height;
-
-                    // Draw image
-                    const ctx = imageCanvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0, width, height);
-
-                    // Store scale for coordinate conversion
-                    drawCanvas.dataset.scaleX = img.width / width;
-                    drawCanvas.dataset.scaleY = img.height / height;
-
-                    // Clear annotations
-                    clearAnnotations();
-                };
-                img.src = e.target.result;
+            img.onload = () => {
+                console.log('Preview loaded successfully');
+                displayImageOnCanvas(img);
             };
-            reader.readAsDataURL(file);
+
+            img.onerror = () => {
+                console.error('Failed to load preview from server');
+                showImagePlaceholder(fileId);
+            };
+
+            // Fetch preview from server (converts GeoTIFF to PNG)
+            img.src = `${API_BASE}/files/${fileId}/preview`;
+        }
+
+        function displayImageOnCanvas(img) {
+            const container = canvasContainer;
+            const maxWidth = container.clientWidth || 600;
+            const maxHeight = container.clientHeight || 400;
+
+            let width = img.width;
+            let height = img.height;
+
+            if (width > maxWidth) {
+                height = (maxWidth / width) * height;
+                width = maxWidth;
+            }
+            if (height > maxHeight) {
+                width = (maxHeight / height) * width;
+                height = maxHeight;
+            }
+
+            // Set canvas sizes
+            imageCanvas.width = width;
+            imageCanvas.height = height;
+            drawCanvas.width = width;
+            drawCanvas.height = height;
+
+            // Draw image
+            const ctx = imageCanvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+
+            // Store scale for coordinate conversion
+            drawCanvas.dataset.scaleX = img.width / width;
+            drawCanvas.dataset.scaleY = img.height / height;
+
+            // Clear annotations
+            clearAnnotations();
+        }
+
+        function showImagePlaceholder(filename) {
+            const container = canvasContainer;
+            const width = container.clientWidth || 600;
+            const height = container.clientHeight || 400;
+
+            imageCanvas.width = width;
+            imageCanvas.height = height;
+            drawCanvas.width = width;
+            drawCanvas.height = height;
+
+            const ctx = imageCanvas.getContext('2d');
+
+            // Dark background
+            ctx.fillStyle = '#1a1a2e';
+            ctx.fillRect(0, 0, width, height);
+
+            // Border
+            ctx.strokeStyle = '#0f3460';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(10, 10, width - 20, height - 20);
+
+            // Icon (simple image icon)
+            ctx.fillStyle = '#0f3460';
+            const iconSize = 60;
+            const iconX = (width - iconSize) / 2;
+            const iconY = (height - iconSize) / 2 - 30;
+            ctx.fillRect(iconX, iconY, iconSize, iconSize * 0.75);
+            ctx.beginPath();
+            ctx.arc(iconX + iconSize * 0.3, iconY + iconSize * 0.25, 8, 0, Math.PI * 2);
+            ctx.fillStyle = '#e94560';
+            ctx.fill();
+
+            // Text
+            ctx.fillStyle = '#aaa';
+            ctx.font = '14px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('GeoTIFF Preview Not Available', width / 2, height / 2 + 20);
+            ctx.fillStyle = '#666';
+            ctx.font = '12px sans-serif';
+            ctx.fillText(filename, width / 2, height / 2 + 45);
+            ctx.fillText('Draw points/boxes using pixel coordinates', width / 2, height / 2 + 65);
+            ctx.fillText('(Coordinates will be sent to the API)', width / 2, height / 2 + 85);
+
+            // Default scale (1:1 for GeoTIFF)
+            drawCanvas.dataset.scaleX = 1;
+            drawCanvas.dataset.scaleY = 1;
+
+            clearAnnotations();
         }
 
         // Drawing Functions
