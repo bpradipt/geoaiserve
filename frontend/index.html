@@ -1,0 +1,1228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoAI API Tester</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            min-height: 100vh;
+        }
+
+        /* Header */
+        .header {
+            background: #16213e;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #0f3460;
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            color: #e94560;
+        }
+
+        .health-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .health-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #666;
+        }
+
+        .health-indicator.healthy {
+            background: #4ade80;
+        }
+
+        .health-indicator.unhealthy {
+            background: #f87171;
+        }
+
+        /* Main Layout */
+        .main-container {
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            gap: 1rem;
+            padding: 1rem;
+            max-height: calc(100vh - 60px - 200px);
+        }
+
+        /* Left Panel - Canvas Area */
+        .canvas-panel {
+            background: #16213e;
+            border-radius: 8px;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .upload-zone {
+            border: 2px dashed #0f3460;
+            border-radius: 8px;
+            padding: 2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.3s, background 0.3s;
+        }
+
+        .upload-zone:hover,
+        .upload-zone.dragover {
+            border-color: #e94560;
+            background: rgba(233, 69, 96, 0.1);
+        }
+
+        .upload-zone input {
+            display: none;
+        }
+
+        .file-info {
+            display: none;
+            padding: 0.5rem;
+            background: #0f3460;
+            border-radius: 4px;
+            font-size: 0.875rem;
+        }
+
+        .file-info.visible {
+            display: block;
+        }
+
+        .canvas-container {
+            position: relative;
+            flex: 1;
+            min-height: 400px;
+            background: #0a0a14;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        #imageCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        #drawCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            cursor: crosshair;
+        }
+
+        .canvas-tools {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .tool-btn {
+            padding: 0.5rem 1rem;
+            border: 1px solid #0f3460;
+            background: #16213e;
+            color: #eee;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .tool-btn:hover {
+            background: #0f3460;
+        }
+
+        .tool-btn.active {
+            background: #e94560;
+            border-color: #e94560;
+        }
+
+        .tool-btn.danger {
+            border-color: #f87171;
+            color: #f87171;
+        }
+
+        .tool-btn.danger:hover {
+            background: #f87171;
+            color: #fff;
+        }
+
+        /* Right Panel - API Controls */
+        .controls-panel {
+            background: #16213e;
+            border-radius: 8px;
+            padding: 1rem;
+            overflow-y: auto;
+        }
+
+        .section {
+            margin-bottom: 1rem;
+        }
+
+        .section-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #e94560;
+            margin-bottom: 0.5rem;
+            padding-bottom: 0.25rem;
+            border-bottom: 1px solid #0f3460;
+        }
+
+        .api-tabs {
+            display: flex;
+            gap: 0.25rem;
+            margin-bottom: 1rem;
+        }
+
+        .api-tab {
+            flex: 1;
+            padding: 0.5rem;
+            border: none;
+            background: #0f3460;
+            color: #aaa;
+            cursor: pointer;
+            border-radius: 4px 4px 0 0;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .api-tab:hover {
+            color: #eee;
+        }
+
+        .api-tab.active {
+            background: #e94560;
+            color: #fff;
+        }
+
+        .api-panel {
+            display: none;
+        }
+
+        .api-panel.active {
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 0.75rem;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.75rem;
+            color: #aaa;
+            margin-bottom: 0.25rem;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #0f3460;
+            background: #0a0a14;
+            color: #eee;
+            border-radius: 4px;
+            font-size: 0.875rem;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #e94560;
+        }
+
+        .api-btn {
+            width: 100%;
+            padding: 0.75rem;
+            border: none;
+            background: #e94560;
+            color: #fff;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            margin-top: 0.5rem;
+            transition: background 0.2s;
+        }
+
+        .api-btn:hover {
+            background: #d63050;
+        }
+
+        .api-btn:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+
+        /* Response Panel */
+        .response-panel {
+            background: #16213e;
+            border-radius: 8px;
+            margin: 0 1rem 1rem;
+            padding: 1rem;
+            max-height: 200px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .response-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .response-header h3 {
+            font-size: 0.875rem;
+            color: #e94560;
+        }
+
+        .response-meta {
+            font-size: 0.75rem;
+            color: #aaa;
+        }
+
+        .response-content {
+            flex: 1;
+            overflow: auto;
+            background: #0a0a14;
+            border-radius: 4px;
+            padding: 0.5rem;
+        }
+
+        .response-content pre {
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.75rem;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .response-content.error pre {
+            color: #f87171;
+        }
+
+        .response-content.success pre {
+            color: #4ade80;
+        }
+
+        /* Models Status */
+        .models-status {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+
+        .model-badge {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            background: #0f3460;
+        }
+
+        .model-badge.loaded {
+            background: rgba(74, 222, 128, 0.2);
+            color: #4ade80;
+        }
+
+        /* Loading Spinner */
+        .loading {
+            display: none;
+            align-items: center;
+            gap: 0.5rem;
+            color: #aaa;
+            font-size: 0.875rem;
+        }
+
+        .loading.visible {
+            display: flex;
+        }
+
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid #0f3460;
+            border-top-color: #e94560;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Annotations Display */
+        .annotations-info {
+            font-size: 0.75rem;
+            color: #aaa;
+            padding: 0.5rem;
+            background: #0a0a14;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <h1>GeoAI API Tester</h1>
+        <div class="health-status">
+            <span class="health-indicator" id="healthIndicator"></span>
+            <span id="healthText">Checking...</span>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="main-container">
+        <!-- Left Panel - Canvas -->
+        <div class="canvas-panel">
+            <!-- Upload Zone -->
+            <div class="upload-zone" id="uploadZone">
+                <input type="file" id="fileInput" accept="image/*,.tif,.tiff">
+                <p>Drop image here or click to upload</p>
+                <p style="font-size: 0.75rem; color: #aaa; margin-top: 0.5rem;">
+                    Supports: JPEG, PNG, GeoTIFF
+                </p>
+            </div>
+
+            <!-- File Info -->
+            <div class="file-info" id="fileInfo">
+                <strong>File:</strong> <span id="fileName">-</span><br>
+                <strong>ID:</strong> <span id="fileId">-</span><br>
+                <strong>Size:</strong> <span id="fileSize">-</span>
+            </div>
+
+            <!-- Canvas -->
+            <div class="canvas-container" id="canvasContainer">
+                <canvas id="imageCanvas"></canvas>
+                <canvas id="drawCanvas"></canvas>
+            </div>
+
+            <!-- Drawing Tools -->
+            <div class="canvas-tools">
+                <button class="tool-btn active" data-tool="point" id="pointTool">
+                    Point Mode
+                </button>
+                <button class="tool-btn" data-tool="box" id="boxTool">
+                    Box Mode
+                </button>
+                <button class="tool-btn danger" id="clearBtn">
+                    Clear All
+                </button>
+                <div class="annotations-info" id="annotationsInfo">
+                    Points: 0 | Boxes: 0
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Panel - API Controls -->
+        <div class="controls-panel">
+            <!-- Models Status -->
+            <div class="section">
+                <div class="section-title">Available Models</div>
+                <div class="models-status" id="modelsStatus">
+                    Loading...
+                </div>
+            </div>
+
+            <!-- API Tabs -->
+            <div class="api-tabs">
+                <button class="api-tab active" data-panel="sam">SAM</button>
+                <button class="api-tab" data-panel="moondream">Moondream</button>
+                <button class="api-tab" data-panel="dinov3">DINOv3</button>
+            </div>
+
+            <!-- SAM Panel -->
+            <div class="api-panel active" id="samPanel">
+                <div class="section-title">Point/Box Segmentation</div>
+                <p style="font-size: 0.75rem; color: #aaa; margin-bottom: 0.5rem;">
+                    Draw points or boxes on the image, then click Predict.
+                </p>
+                <button class="api-btn" id="samPredictBtn" disabled>
+                    Predict with Points/Boxes
+                </button>
+
+                <div class="section-title" style="margin-top: 1rem;">Text-Prompted Masks</div>
+                <div class="form-group">
+                    <label>Text Prompt</label>
+                    <input type="text" id="samPrompt" placeholder="e.g., tree, building, road">
+                </div>
+                <div class="form-group">
+                    <label>Min Size (pixels)</label>
+                    <input type="number" id="samMinSize" value="0" min="0">
+                </div>
+                <button class="api-btn" id="samGenerateBtn" disabled>
+                    Generate Masks
+                </button>
+            </div>
+
+            <!-- Moondream Panel -->
+            <div class="api-panel" id="moondreamPanel">
+                <div class="section-title">Image Caption</div>
+                <div class="form-group">
+                    <label>Caption Length</label>
+                    <select id="captionLength">
+                        <option value="short">Short</option>
+                        <option value="normal" selected>Normal</option>
+                        <option value="long">Long</option>
+                    </select>
+                </div>
+                <button class="api-btn" id="captionBtn" disabled>
+                    Generate Caption
+                </button>
+
+                <div class="section-title" style="margin-top: 1rem;">Visual Q&A</div>
+                <div class="form-group">
+                    <label>Question</label>
+                    <input type="text" id="vqaQuestion" placeholder="What do you see in this image?">
+                </div>
+                <button class="api-btn" id="queryBtn" disabled>
+                    Ask Question
+                </button>
+
+                <div class="section-title" style="margin-top: 1rem;">Object Detection</div>
+                <div class="form-group">
+                    <label>Object Type</label>
+                    <input type="text" id="detectObject" placeholder="e.g., car, building">
+                </div>
+                <div class="form-group">
+                    <label>Confidence Threshold</label>
+                    <input type="range" id="detectThreshold" min="0" max="1" step="0.05" value="0.5">
+                    <span id="thresholdValue">0.5</span>
+                </div>
+                <button class="api-btn" id="detectBtn" disabled>
+                    Detect Objects
+                </button>
+
+                <div class="section-title" style="margin-top: 1rem;">Point Detection</div>
+                <div class="form-group">
+                    <label>Object Description</label>
+                    <input type="text" id="pointObject" placeholder="e.g., red roof house">
+                </div>
+                <button class="api-btn" id="pointBtn" disabled>
+                    Find Points
+                </button>
+            </div>
+
+            <!-- DINOv3 Panel -->
+            <div class="api-panel" id="dinov3Panel">
+                <div class="section-title">Feature Extraction</div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="returnPatchFeatures">
+                        Return Patch Features
+                    </label>
+                </div>
+                <button class="api-btn" id="featuresBtn" disabled>
+                    Extract Features
+                </button>
+
+                <div class="section-title" style="margin-top: 1rem;">Similarity Map</div>
+                <p style="font-size: 0.75rem; color: #aaa; margin-bottom: 0.5rem;">
+                    Draw points on the image to use as query points.
+                </p>
+                <button class="api-btn" id="similarityBtn" disabled>
+                    Compute Similarity
+                </button>
+            </div>
+
+            <!-- Loading Indicator -->
+            <div class="loading" id="loadingIndicator">
+                <div class="spinner"></div>
+                <span>Processing...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Response Panel -->
+    <div class="response-panel">
+        <div class="response-header">
+            <h3>Response</h3>
+            <span class="response-meta" id="responseMeta">-</span>
+        </div>
+        <div class="response-content" id="responseContent">
+            <pre>Upload an image and run an API to see results here.</pre>
+        </div>
+    </div>
+
+    <script>
+        // API Configuration
+        const API_BASE = '/api/v1';
+
+        // State
+        let currentFileId = null;
+        let currentTool = 'point';
+        let points = [];
+        let pointLabels = [];
+        let boxes = [];
+        let isDrawingBox = false;
+        let boxStart = null;
+
+        // DOM Elements
+        const uploadZone = document.getElementById('uploadZone');
+        const fileInput = document.getElementById('fileInput');
+        const fileInfo = document.getElementById('fileInfo');
+        const imageCanvas = document.getElementById('imageCanvas');
+        const drawCanvas = document.getElementById('drawCanvas');
+        const canvasContainer = document.getElementById('canvasContainer');
+        const annotationsInfo = document.getElementById('annotationsInfo');
+        const responseContent = document.getElementById('responseContent');
+        const responseMeta = document.getElementById('responseMeta');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const healthIndicator = document.getElementById('healthIndicator');
+        const healthText = document.getElementById('healthText');
+        const modelsStatus = document.getElementById('modelsStatus');
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            checkHealth();
+            setupEventListeners();
+        });
+
+        // Health Check
+        async function checkHealth() {
+            try {
+                const response = await fetch(`${API_BASE}/health`);
+                const data = await response.json();
+
+                healthIndicator.classList.add('healthy');
+                healthText.textContent = 'Connected';
+
+                // Update models status
+                updateModelsStatus(data.models_loaded || []);
+            } catch (error) {
+                healthIndicator.classList.add('unhealthy');
+                healthText.textContent = 'Disconnected';
+                modelsStatus.textContent = 'Unable to connect to API';
+            }
+        }
+
+        function updateModelsStatus(models) {
+            modelsStatus.innerHTML = models.map(m =>
+                `<span class="model-badge loaded">${m}</span>`
+            ).join('') || '<span class="model-badge">No models loaded</span>';
+        }
+
+        // Event Listeners Setup
+        function setupEventListeners() {
+            // File Upload
+            uploadZone.addEventListener('click', () => fileInput.click());
+            uploadZone.addEventListener('dragover', handleDragOver);
+            uploadZone.addEventListener('dragleave', handleDragLeave);
+            uploadZone.addEventListener('drop', handleDrop);
+            fileInput.addEventListener('change', handleFileSelect);
+
+            // Drawing Tools
+            document.getElementById('pointTool').addEventListener('click', () => setTool('point'));
+            document.getElementById('boxTool').addEventListener('click', () => setTool('box'));
+            document.getElementById('clearBtn').addEventListener('click', clearAnnotations);
+
+            // Canvas Events
+            drawCanvas.addEventListener('mousedown', handleCanvasMouseDown);
+            drawCanvas.addEventListener('mousemove', handleCanvasMouseMove);
+            drawCanvas.addEventListener('mouseup', handleCanvasMouseUp);
+            drawCanvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+            // API Tabs
+            document.querySelectorAll('.api-tab').forEach(tab => {
+                tab.addEventListener('click', () => switchTab(tab.dataset.panel));
+            });
+
+            // Threshold Slider
+            document.getElementById('detectThreshold').addEventListener('input', (e) => {
+                document.getElementById('thresholdValue').textContent = e.target.value;
+            });
+
+            // API Buttons
+            document.getElementById('samPredictBtn').addEventListener('click', samPredict);
+            document.getElementById('samGenerateBtn').addEventListener('click', samGenerate);
+            document.getElementById('captionBtn').addEventListener('click', moondreamCaption);
+            document.getElementById('queryBtn').addEventListener('click', moondreamQuery);
+            document.getElementById('detectBtn').addEventListener('click', moondreamDetect);
+            document.getElementById('pointBtn').addEventListener('click', moondreamPoint);
+            document.getElementById('featuresBtn').addEventListener('click', dinoFeatures);
+            document.getElementById('similarityBtn').addEventListener('click', dinoSimilarity);
+        }
+
+        // File Upload Handlers
+        function handleDragOver(e) {
+            e.preventDefault();
+            uploadZone.classList.add('dragover');
+        }
+
+        function handleDragLeave(e) {
+            e.preventDefault();
+            uploadZone.classList.remove('dragover');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            uploadZone.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                uploadFile(files[0]);
+            }
+        }
+
+        function handleFileSelect(e) {
+            if (e.target.files.length > 0) {
+                uploadFile(e.target.files[0]);
+            }
+        }
+
+        async function uploadFile(file) {
+            showLoading(true);
+
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const response = await fetch(`${API_BASE}/files/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Upload failed: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                currentFileId = data.file_id;
+
+                // Update file info display
+                document.getElementById('fileName').textContent = data.filename;
+                document.getElementById('fileId').textContent = data.file_id;
+                document.getElementById('fileSize').textContent = formatBytes(data.size);
+                fileInfo.classList.add('visible');
+
+                // Load image to canvas
+                loadImageToCanvas(file);
+
+                // Enable API buttons
+                enableApiButtons(true);
+
+                showResponse(data, 'success');
+            } catch (error) {
+                showResponse({ error: error.message }, 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function loadImageToCanvas(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    // Resize canvas to fit container while maintaining aspect ratio
+                    const container = canvasContainer;
+                    const maxWidth = container.clientWidth;
+                    const maxHeight = container.clientHeight;
+
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > maxWidth) {
+                        height = (maxWidth / width) * height;
+                        width = maxWidth;
+                    }
+                    if (height > maxHeight) {
+                        width = (maxHeight / height) * width;
+                        height = maxHeight;
+                    }
+
+                    // Set canvas sizes
+                    imageCanvas.width = width;
+                    imageCanvas.height = height;
+                    drawCanvas.width = width;
+                    drawCanvas.height = height;
+
+                    // Draw image
+                    const ctx = imageCanvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    // Store scale for coordinate conversion
+                    drawCanvas.dataset.scaleX = img.width / width;
+                    drawCanvas.dataset.scaleY = img.height / height;
+
+                    // Clear annotations
+                    clearAnnotations();
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // Drawing Functions
+        function setTool(tool) {
+            currentTool = tool;
+            document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.tool === tool);
+            });
+        }
+
+        function handleCanvasMouseDown(e) {
+            const rect = drawCanvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            if (currentTool === 'point') {
+                // Left click = foreground (1), right click = background (0)
+                const label = e.button === 0 ? 1 : 0;
+                addPoint(x, y, label);
+            } else if (currentTool === 'box') {
+                isDrawingBox = true;
+                boxStart = { x, y };
+            }
+        }
+
+        function handleCanvasMouseMove(e) {
+            if (!isDrawingBox) return;
+
+            const rect = drawCanvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            redrawAnnotations();
+
+            // Draw current box preview
+            const ctx = drawCanvas.getContext('2d');
+            ctx.strokeStyle = '#e94560';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            ctx.strokeRect(boxStart.x, boxStart.y, x - boxStart.x, y - boxStart.y);
+            ctx.setLineDash([]);
+        }
+
+        function handleCanvasMouseUp(e) {
+            if (!isDrawingBox) return;
+
+            const rect = drawCanvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            // Add box if it has some size
+            if (Math.abs(x - boxStart.x) > 5 && Math.abs(y - boxStart.y) > 5) {
+                addBox(boxStart.x, boxStart.y, x, y);
+            }
+
+            isDrawingBox = false;
+            boxStart = null;
+        }
+
+        function addPoint(x, y, label) {
+            points.push([x, y]);
+            pointLabels.push(label);
+            updateAnnotationsInfo();
+            redrawAnnotations();
+        }
+
+        function addBox(x1, y1, x2, y2) {
+            // Normalize coordinates (ensure x1,y1 is top-left)
+            const box = [
+                Math.min(x1, x2),
+                Math.min(y1, y2),
+                Math.max(x1, x2),
+                Math.max(y1, y2)
+            ];
+            boxes.push(box);
+            updateAnnotationsInfo();
+            redrawAnnotations();
+        }
+
+        function clearAnnotations() {
+            points = [];
+            pointLabels = [];
+            boxes = [];
+            updateAnnotationsInfo();
+            redrawAnnotations();
+        }
+
+        function updateAnnotationsInfo() {
+            annotationsInfo.textContent = `Points: ${points.length} | Boxes: ${boxes.length}`;
+        }
+
+        function redrawAnnotations() {
+            const ctx = drawCanvas.getContext('2d');
+            ctx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+
+            // Draw points
+            points.forEach((point, i) => {
+                const [x, y] = point;
+                const label = pointLabels[i];
+
+                ctx.beginPath();
+                ctx.arc(x, y, 6, 0, 2 * Math.PI);
+                ctx.fillStyle = label === 1 ? '#4ade80' : '#f87171';
+                ctx.fill();
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            });
+
+            // Draw boxes
+            boxes.forEach(box => {
+                const [x1, y1, x2, y2] = box;
+                ctx.strokeStyle = '#e94560';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+            });
+        }
+
+        // Tab Switching
+        function switchTab(panel) {
+            document.querySelectorAll('.api-tab').forEach(tab => {
+                tab.classList.toggle('active', tab.dataset.panel === panel);
+            });
+            document.querySelectorAll('.api-panel').forEach(p => {
+                p.classList.toggle('active', p.id === `${panel}Panel`);
+            });
+        }
+
+        // API Functions
+        async function samPredict() {
+            if (!currentFileId) return;
+            if (points.length === 0 && boxes.length === 0) {
+                showResponse({ error: 'Draw at least one point or box first' }, 'error');
+                return;
+            }
+
+            showLoading(true);
+
+            try {
+                const scaleX = parseFloat(drawCanvas.dataset.scaleX) || 1;
+                const scaleY = parseFloat(drawCanvas.dataset.scaleY) || 1;
+
+                const body = {
+                    file_id: currentFileId,
+                    multimask_output: true
+                };
+
+                if (points.length > 0) {
+                    body.point_coords = points.map(([x, y]) => [x * scaleX, y * scaleY]);
+                    body.point_labels = pointLabels;
+                }
+
+                if (boxes.length > 0) {
+                    body.boxes = boxes.map(([x1, y1, x2, y2]) => [
+                        x1 * scaleX, y1 * scaleY, x2 * scaleX, y2 * scaleY
+                    ]);
+                }
+
+                const response = await fetch(`${API_BASE}/sam/predict`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+
+                const data = await response.json();
+                showResponse(data, response.ok ? 'success' : 'error');
+            } catch (error) {
+                showResponse({ error: error.message }, 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        async function samGenerate() {
+            if (!currentFileId) return;
+
+            const prompt = document.getElementById('samPrompt').value.trim();
+            if (!prompt) {
+                showResponse({ error: 'Enter a text prompt first' }, 'error');
+                return;
+            }
+
+            showLoading(true);
+
+            try {
+                const response = await fetch(`${API_BASE}/sam/generate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        file_id: currentFileId,
+                        prompt: prompt,
+                        min_size: parseInt(document.getElementById('samMinSize').value) || 0
+                    })
+                });
+
+                const data = await response.json();
+                showResponse(data, response.ok ? 'success' : 'error');
+            } catch (error) {
+                showResponse({ error: error.message }, 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        async function moondreamCaption() {
+            if (!currentFileId) return;
+
+            showLoading(true);
+
+            try {
+                const response = await fetch(`${API_BASE}/moondream/caption`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        file_id: currentFileId,
+                        length: document.getElementById('captionLength').value
+                    })
+                });
+
+                const data = await response.json();
+                showResponse(data, response.ok ? 'success' : 'error');
+            } catch (error) {
+                showResponse({ error: error.message }, 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        async function moondreamQuery() {
+            if (!currentFileId) return;
+
+            const question = document.getElementById('vqaQuestion').value.trim();
+            if (!question) {
+                showResponse({ error: 'Enter a question first' }, 'error');
+                return;
+            }
+
+            showLoading(true);
+
+            try {
+                const response = await fetch(`${API_BASE}/moondream/query`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        file_id: currentFileId,
+                        question: question
+                    })
+                });
+
+                const data = await response.json();
+                showResponse(data, response.ok ? 'success' : 'error');
+            } catch (error) {
+                showResponse({ error: error.message }, 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        async function moondreamDetect() {
+            if (!currentFileId) return;
+
+            const objectType = document.getElementById('detectObject').value.trim();
+            if (!objectType) {
+                showResponse({ error: 'Enter an object type first' }, 'error');
+                return;
+            }
+
+            showLoading(true);
+
+            try {
+                const response = await fetch(`${API_BASE}/moondream/detect`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        file_id: currentFileId,
+                        object_type: objectType,
+                        confidence_threshold: parseFloat(document.getElementById('detectThreshold').value)
+                    })
+                });
+
+                const data = await response.json();
+                showResponse(data, response.ok ? 'success' : 'error');
+
+                // Draw detections on canvas if successful
+                if (response.ok && data.detections) {
+                    drawDetections(data.detections);
+                }
+            } catch (error) {
+                showResponse({ error: error.message }, 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        async function moondreamPoint() {
+            if (!currentFileId) return;
+
+            const objectDesc = document.getElementById('pointObject').value.trim();
+            if (!objectDesc) {
+                showResponse({ error: 'Enter an object description first' }, 'error');
+                return;
+            }
+
+            showLoading(true);
+
+            try {
+                const response = await fetch(`${API_BASE}/moondream/point`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        file_id: currentFileId,
+                        object_description: objectDesc
+                    })
+                });
+
+                const data = await response.json();
+                showResponse(data, response.ok ? 'success' : 'error');
+
+                // Draw points on canvas if successful
+                if (response.ok && data.points) {
+                    drawResultPoints(data.points);
+                }
+            } catch (error) {
+                showResponse({ error: error.message }, 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        async function dinoFeatures() {
+            if (!currentFileId) return;
+
+            showLoading(true);
+
+            try {
+                const response = await fetch(`${API_BASE}/dinov3/features`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        file_id: currentFileId,
+                        return_patch_features: document.getElementById('returnPatchFeatures').checked
+                    })
+                });
+
+                const data = await response.json();
+                showResponse(data, response.ok ? 'success' : 'error');
+            } catch (error) {
+                showResponse({ error: error.message }, 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        async function dinoSimilarity() {
+            if (!currentFileId) return;
+            if (points.length === 0) {
+                showResponse({ error: 'Draw at least one point first' }, 'error');
+                return;
+            }
+
+            showLoading(true);
+
+            try {
+                const scaleX = parseFloat(drawCanvas.dataset.scaleX) || 1;
+                const scaleY = parseFloat(drawCanvas.dataset.scaleY) || 1;
+
+                const response = await fetch(`${API_BASE}/dinov3/similarity`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        file_id: currentFileId,
+                        query_points: points.map(([x, y]) => [x * scaleX, y * scaleY])
+                    })
+                });
+
+                const data = await response.json();
+                showResponse(data, response.ok ? 'success' : 'error');
+            } catch (error) {
+                showResponse({ error: error.message }, 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // Drawing Results
+        function drawDetections(detections) {
+            const ctx = drawCanvas.getContext('2d');
+            const scaleX = parseFloat(drawCanvas.dataset.scaleX) || 1;
+            const scaleY = parseFloat(drawCanvas.dataset.scaleY) || 1;
+
+            detections.forEach(det => {
+                if (det.bbox) {
+                    const [x1, y1, x2, y2] = det.bbox;
+                    ctx.strokeStyle = '#fbbf24';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(
+                        x1 / scaleX, y1 / scaleY,
+                        (x2 - x1) / scaleX, (y2 - y1) / scaleY
+                    );
+
+                    // Draw label
+                    ctx.fillStyle = '#fbbf24';
+                    ctx.font = '12px sans-serif';
+                    ctx.fillText(
+                        `${det.label} (${(det.confidence * 100).toFixed(0)}%)`,
+                        x1 / scaleX, y1 / scaleY - 5
+                    );
+                }
+            });
+        }
+
+        function drawResultPoints(points) {
+            const ctx = drawCanvas.getContext('2d');
+            const scaleX = parseFloat(drawCanvas.dataset.scaleX) || 1;
+            const scaleY = parseFloat(drawCanvas.dataset.scaleY) || 1;
+
+            points.forEach(pt => {
+                const x = pt.x / scaleX;
+                const y = pt.y / scaleY;
+
+                ctx.beginPath();
+                ctx.arc(x, y, 8, 0, 2 * Math.PI);
+                ctx.fillStyle = '#fbbf24';
+                ctx.fill();
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            });
+        }
+
+        // Utility Functions
+        function enableApiButtons(enabled) {
+            document.querySelectorAll('.api-btn').forEach(btn => {
+                btn.disabled = !enabled;
+            });
+        }
+
+        function showLoading(show) {
+            loadingIndicator.classList.toggle('visible', show);
+        }
+
+        function showResponse(data, type) {
+            responseContent.className = `response-content ${type}`;
+            responseContent.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+
+            if (data.metadata?.processing_time) {
+                responseMeta.textContent = `${data.metadata.processing_time.toFixed(2)}s`;
+            } else {
+                responseMeta.textContent = '-';
+            }
+        }
+
+        function formatBytes(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+    </script>
+</body>
+</html>
