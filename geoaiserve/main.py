@@ -6,10 +6,13 @@ import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
+from pathlib import Path
+
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
 from .models import registry
@@ -119,6 +122,17 @@ def create_app() -> FastAPI:
         dinov3_router,
         prefix=settings.api_prefix,
     )
+
+    # Mount frontend static files
+    frontend_dir = Path(__file__).parent.parent / "frontend"
+    if frontend_dir.exists():
+        app.mount("/static", StaticFiles(directory=frontend_dir), name="static")
+        logger.info(f"Mounted frontend static files from: {frontend_dir}")
+
+        @app.get("/", include_in_schema=False)
+        async def serve_frontend() -> FileResponse:
+            """Serve the frontend test UI."""
+            return FileResponse(frontend_dir / "index.html")
 
     # Exception handlers
     @app.exception_handler(RequestValidationError)
