@@ -6,9 +6,10 @@ import logging
 import time
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from ..config import get_settings
+from ..dependencies import require_inference_slot
 from ..models import registry
 from ..schemas.common import GeoMetadata, ModelType
 from ..schemas.sam import (
@@ -23,7 +24,7 @@ from ..services.file_handler import file_handler
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/sam", tags=["SAM"])
+router = APIRouter(prefix="/sam", tags=["SAM"], dependencies=[Depends(require_inference_slot)])
 
 
 def resolve_image_path(request) -> Path:

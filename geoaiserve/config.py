@@ -87,6 +87,9 @@ class Settings(BaseSettings):
     secret_key: str = "your-secret-key-change-in-production"
     rate_limit: str = "100/minute"
 
+    # Concurrency Configuration
+    max_concurrent_inference: int = 1
+
     # Monitoring Configuration
     enable_metrics: bool = False
     metrics_port: int = 9090
