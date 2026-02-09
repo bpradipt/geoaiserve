@@ -67,11 +67,46 @@ CORS_ORIGINS=*
 
 # Security
 API_KEY_REQUIRED=false
+API_KEYS=              # comma-separated list of valid keys
 RATE_LIMIT=100/minute
+
+# Concurrency
+MAX_CONCURRENT_INFERENCE=1  # max simultaneous inference requests
 
 # Logging
 LOG_LEVEL=info
 ```
+
+## Security
+
+API key authentication is **disabled by default**. To enable it, set the following environment variables:
+
+```bash
+API_KEY_REQUIRED=true
+API_KEYS=key1,key2,key3
+```
+
+When enabled, every request must include a valid key in the `X-API-Key` header:
+
+```bash
+curl -H "X-API-Key: key1" http://localhost:8000/api/v1/health
+```
+
+Requests with a missing or invalid key receive a `401 Unauthorized` response.
+
+**CORS and credentials:** If `CORS_CREDENTIALS=true` (the default) and `CORS_ORIGINS=*`, the server automatically sets `allow_credentials=False` to comply with the CORS specification, which forbids credentialed requests with a wildcard origin. A warning is logged when this auto-correction occurs.
+
+## Concurrency
+
+Inference endpoints (SAM, Moondream, DINOv3) are gated by a semaphore that limits the number of requests processed simultaneously. By default only **one** inference request runs at a time. If a request arrives while the limit is reached, it immediately receives a `503 Service Unavailable` response with the message *"Server is busy processing another request"*.
+
+Adjust the limit with the `MAX_CONCURRENT_INFERENCE` environment variable:
+
+```bash
+MAX_CONCURRENT_INFERENCE=2  # allow two concurrent inference requests
+```
+
+Non-inference endpoints (health checks, model listing, file uploads/downloads) are **not** affected by this limit and remain available regardless of inference load.
 
 ## API Endpoints
 
@@ -313,45 +348,6 @@ This project follows:
 ```bash
 uv run uvicorn geoaiserve.main:app --reload --log-level debug
 ```
-
-## Implementation Status
-
-### ✅ Phase 1: Core Infrastructure (Completed)
-
-- [x] FastAPI application setup
-- [x] Configuration management with Pydantic Settings
-- [x] Model registry with lazy loading
-- [x] Request/response schemas
-- [x] Health check endpoint
-- [x] Models listing endpoint
-- [x] File upload/download service
-- [x] Error handling and logging
-
-### ✅ Phase 2: Model Integration (Completed)
-
-- [x] SAM endpoints (generate, predict, batch)
-- [x] Moondream endpoints (caption, query, detect, point)
-- [x] DINOv3 endpoints (features, similarity, batch-similarity)
-- [x] Model service implementations
-- [x] Full request/response schemas
-- [x] Mock model fallbacks for testing
-
-### 📋 Phase 3: Advanced Features (Planned)
-
-- [ ] Async job queue (Celery/RQ)
-- [ ] Redis caching
-- [ ] GroundedSAM endpoints
-- [ ] Detectron2 endpoints
-- [ ] TIMM endpoints
-
-### 📋 Phase 4: Production Readiness (In Progress)
-
-- [ ] Authentication & authorization
-- [ ] Rate limiting
-- [ ] Metrics & monitoring
-- [x] Comprehensive tests (102 tests covering validation, error handling, response structure)
-- [ ] Docker deployment
-- [ ] CI/CD pipeline
 
 ## Architecture
 
