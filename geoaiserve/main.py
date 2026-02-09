@@ -8,13 +8,14 @@ from typing import AsyncGenerator
 
 from pathlib import Path
 
-from fastapi import FastAPI, Request, status
+from fastapi import Depends, FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
+from .dependencies import require_api_key
 from .models import registry
 from .models.dinov3_service import DINOv3Service
 from .models.moondream_service import MoondreamService
@@ -92,35 +93,48 @@ def create_app() -> FastAPI:
 
     # Configure CORS
     if settings.enable_cors:
+        allow_credentials = settings.cors_credentials
+        if allow_credentials and "*" in settings.cors_origins:
+            logger.warning(
+                "CORS misconfiguration: credentials=True with origins=['*'] "
+                "violates the CORS spec. Setting allow_credentials=False."
+            )
+            allow_credentials = False
         app.add_middleware(
             CORSMiddleware,
             allow_origins=settings.cors_origins,
-            allow_credentials=settings.cors_credentials,
+            allow_credentials=allow_credentials,
             allow_methods=settings.cors_methods,
             allow_headers=settings.cors_headers,
         )
         logger.info(f"CORS enabled with origins: {settings.cors_origins}")
 
-    # Include routers
+    # Include routers with API key dependency
+    api_key_dep = [Depends(require_api_key)]
     app.include_router(
         common_router,
         prefix=settings.api_prefix,
+        dependencies=api_key_dep,
     )
     app.include_router(
         files_router,
         prefix=settings.api_prefix,
+        dependencies=api_key_dep,
     )
     app.include_router(
         sam_router,
         prefix=settings.api_prefix,
+        dependencies=api_key_dep,
     )
     app.include_router(
         moondream_router,
         prefix=settings.api_prefix,
+        dependencies=api_key_dep,
     )
     app.include_router(
         dinov3_router,
         prefix=settings.api_prefix,
+        dependencies=api_key_dep,
     )
 
     # Mount frontend static files

@@ -1,11 +1,12 @@
-"""FastAPI dependencies for inference concurrency control."""
+"""FastAPI dependencies for inference concurrency control and API key validation."""
 
 from __future__ import annotations
 
 import threading
 from collections.abc import Generator
 
-from fastapi import HTTPException, status
+from fastapi import Depends, HTTPException, status
+from fastapi.security import APIKeyHeader
 
 from .config import get_settings
 
@@ -35,3 +36,23 @@ def require_inference_slot() -> Generator[None, None, None]:
         yield
     finally:
         _inference_semaphore.release()
+
+
+_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+def require_api_key(api_key: str | None = Depends(_api_key_header)) -> None:
+    """Validate the API key if API key authentication is enabled.
+
+    When ``settings.api_key_required`` is False (the default), this is a no-op.
+    When True, the request must include a valid ``X-API-Key`` header whose value
+    is present in ``settings.api_keys``, otherwise a 401 is raised.
+    """
+    settings = get_settings()
+    if not settings.api_key_required:
+        return
+    if not api_key or api_key not in settings.api_keys:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing API key",
+        )
