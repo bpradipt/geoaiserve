@@ -94,7 +94,7 @@ async def list_models() -> ModelsListResponse:
     models = []
     for model_type in ModelType:
         # Skip if not in available types and not in config
-        if model_type not in available_types and model_type.value not in settings.geoai_models:
+        if model_type not in available_types and model_type.value not in settings.geoai_models_list:
             continue
 
         info = model_info_map.get(model_type, {

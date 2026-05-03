@@ -52,11 +52,11 @@ class FileHandler:
             HTTPException: If file validation fails
         """
         # Validate content type
-        if validate_image and file.content_type not in self.settings.allowed_image_formats:
+        if validate_image and file.content_type not in self.settings.allowed_image_formats_list:
             raise HTTPException(
                 status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
                 detail=f"Unsupported file type: {file.content_type}. "
-                       f"Allowed types: {self.settings.allowed_image_formats}"
+                       f"Allowed types: {self.settings.allowed_image_formats_list}"
             )
 
         # Generate unique filename
@@ -297,11 +297,11 @@ class FileHandler:
             HTTPException: If file validation fails
         """
         # Validate content type
-        if validate_image and file.content_type not in self.settings.allowed_image_formats:
+        if validate_image and file.content_type not in self.settings.allowed_image_formats_list:
             raise HTTPException(
                 status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
                 detail=f"Unsupported file type: {file.content_type}. "
-                       f"Allowed types: {self.settings.allowed_image_formats}"
+                       f"Allowed types: {self.settings.allowed_image_formats_list}"
             )
 
         # Generate unique filename

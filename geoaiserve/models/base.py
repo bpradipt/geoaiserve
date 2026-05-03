@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -10,13 +9,10 @@ from ..schemas.common import DeviceType, ModelType
 
 
 def _allow_mock_from_env() -> bool:
-    """Check if mock models are allowed via environment variable.
+    """True when demo mocks are enabled (GEOAI_ALLOW_MOCK or Settings.geoai_allow_mock)."""
+    from ..config import get_settings
 
-    Returns:
-        True if GEOAI_ALLOW_MOCK is set to '1', 'true', or 'yes'
-    """
-    value = os.environ.get("GEOAI_ALLOW_MOCK", "").lower()
-    return value in ("1", "true", "yes")
+    return get_settings().geoai_allow_mock
 
 
 class BaseGeoModel(ABC):
@@ -35,7 +31,7 @@ class BaseGeoModel(ABC):
             model_name: HuggingFace model identifier or local path
             device: Device to run inference on (cuda, cpu, mps)
             allow_mock: If True, fall back to mock when dependencies missing.
-                        If None, check GEOAI_ALLOW_MOCK env var.
+                        If None, use GEOAI_ALLOW_MOCK / geoai_allow_mock in Settings (.env).
                         Default is False (raise error if deps missing).
             **kwargs: Additional model-specific parameters
         """

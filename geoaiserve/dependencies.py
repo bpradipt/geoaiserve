@@ -46,12 +46,12 @@ def require_api_key(api_key: str | None = Depends(_api_key_header)) -> None:
 
     When ``settings.api_key_required`` is False (the default), this is a no-op.
     When True, the request must include a valid ``X-API-Key`` header whose value
-    is present in ``settings.api_keys``, otherwise a 401 is raised.
+    is present in ``settings.api_keys_list``, otherwise a 401 is raised.
     """
     settings = get_settings()
     if not settings.api_key_required:
         return
-    if not api_key or api_key not in settings.api_keys:
+    if not api_key or api_key not in settings.api_keys_list:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing API key",

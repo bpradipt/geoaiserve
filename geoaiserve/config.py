@@ -2,12 +2,25 @@
 
 from __future__ import annotations
 
+import json
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _parse_env_list(value: str) -> list[str]:
+    """Parse .env list values: JSON array, comma-separated, '*', or empty."""
+    s = (value or "").strip()
+    if not s:
+        return []
+    if s == "*":
+        return ["*"]
+    if s.startswith("["):
+        return json.loads(s)
+    return [x.strip() for x in s.split(",") if x.strip()]
 
 
 class Settings(BaseSettings):
@@ -31,17 +44,18 @@ class Settings(BaseSettings):
     port: int = 8000
     workers: int = 4
 
-    # CORS Configuration
+    # CORS Configuration (str so .env can use `*` or comma-separated; not JSON)
     enable_cors: bool = True
-    cors_origins: list[str] = Field(default_factory=lambda: ["*"])
+    cors_origins: str = "*"
     cors_credentials: bool = True
-    cors_methods: list[str] = Field(default_factory=lambda: ["*"])
-    cors_headers: list[str] = Field(default_factory=lambda: ["*"])
+    cors_methods: str = "*"
+    cors_headers: str = "*"
 
     # Model Configuration
-    geoai_models: list[str] = Field(
-        default_factory=lambda: ["sam", "moondream", "dinov3"]
-    )
+    geoai_models: str = "sam,moondream,dinov3"
+    # When true, DINOv3/SAM/Moondream use in-process mocks if torch/geoai are missing.
+    # Set via env GEOAI_ALLOW_MOCK=1 or in .env (loaded by Settings).
+    geoai_allow_mock: bool = False
     device: Literal["cuda", "cpu", "mps"] = "cpu"
     gpu_memory_limit: str = "8GB"
 
@@ -61,14 +75,8 @@ class Settings(BaseSettings):
     upload_dir: Path = Path("/tmp/geoaiserve/uploads")
     upload_ttl_hours: int = Field(default=24, ge=1, description="Hours before uploaded files are cleaned up")
     max_upload_size: int = 100 * 1024 * 1024  # 100 MB
-    allowed_image_formats: list[str] = Field(
-        default_factory=lambda: [
-            "image/tiff",
-            "image/jpeg",
-            "image/png",
-            "image/geotiff",
-            "application/octet-stream",
-        ]
+    allowed_image_formats: str = (
+        "image/tiff,image/jpeg,image/png,image/geotiff,application/octet-stream"
     )
 
     # Cache Configuration
@@ -83,7 +91,7 @@ class Settings(BaseSettings):
 
     # Security Configuration
     api_key_required: bool = False
-    api_keys: list[str] = Field(default_factory=list)
+    api_keys: str = ""
     secret_key: str = "your-secret-key-change-in-production"
     rate_limit: str = "100/minute"
 
@@ -98,6 +106,36 @@ class Settings(BaseSettings):
     # Feature Store Configuration
     feature_store_backend: Literal["zarr", "memory"] = "zarr"
     feature_store_path: Path = Path("/tmp/geoaiserve/features")
+
+    @computed_field
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return _parse_env_list(self.cors_origins)
+
+    @computed_field
+    @property
+    def cors_methods_list(self) -> list[str]:
+        return _parse_env_list(self.cors_methods)
+
+    @computed_field
+    @property
+    def cors_headers_list(self) -> list[str]:
+        return _parse_env_list(self.cors_headers)
+
+    @computed_field
+    @property
+    def geoai_models_list(self) -> list[str]:
+        return _parse_env_list(self.geoai_models)
+
+    @computed_field
+    @property
+    def api_keys_list(self) -> list[str]:
+        return _parse_env_list(self.api_keys)
+
+    @computed_field
+    @property
+    def allowed_image_formats_list(self) -> list[str]:
+        return _parse_env_list(self.allowed_image_formats)
 
     def __init__(self, **kwargs):
         """Initialize settings and create storage directories."""

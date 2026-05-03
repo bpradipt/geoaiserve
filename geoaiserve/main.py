@@ -20,7 +20,14 @@ from .models import registry
 from .models.dinov3_service import DINOv3Service
 from .models.moondream_service import MoondreamService
 from .models.sam_service import SAMService
-from .routers import common_router, dinov3_router, files_router, moondream_router, sam_router
+from .routers import (
+    common_router,
+    dinov3_router,
+    files_router,
+    moondream_router,
+    sam_router,
+    search_router,
+)
 from .schemas import ErrorResponse, ModelType
 
 # Configure logging
@@ -43,7 +50,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     settings = get_settings()
     logger.info(f"Starting {settings.app_name} v{settings.app_version}")
-    logger.info(f"Configured models: {settings.geoai_models}")
+    logger.info(f"Configured models: {settings.geoai_models_list}")
     logger.info(f"Device: {settings.device}")
     logger.info(f"Storage path: {settings.storage_path}")
 
@@ -94,7 +101,7 @@ def create_app() -> FastAPI:
     # Configure CORS
     if settings.enable_cors:
         allow_credentials = settings.cors_credentials
-        if allow_credentials and "*" in settings.cors_origins:
+        if allow_credentials and "*" in settings.cors_origins_list:
             logger.warning(
                 "CORS misconfiguration: credentials=True with origins=['*'] "
                 "violates the CORS spec. Setting allow_credentials=False."
@@ -102,12 +109,12 @@ def create_app() -> FastAPI:
             allow_credentials = False
         app.add_middleware(
             CORSMiddleware,
-            allow_origins=settings.cors_origins,
+            allow_origins=settings.cors_origins_list,
             allow_credentials=allow_credentials,
-            allow_methods=settings.cors_methods,
-            allow_headers=settings.cors_headers,
+            allow_methods=settings.cors_methods_list,
+            allow_headers=settings.cors_headers_list,
         )
-        logger.info(f"CORS enabled with origins: {settings.cors_origins}")
+        logger.info(f"CORS enabled with origins: {settings.cors_origins_list}")
 
     # Include routers with API key dependency
     api_key_dep = [Depends(require_api_key)]
@@ -133,6 +140,11 @@ def create_app() -> FastAPI:
     )
     app.include_router(
         dinov3_router,
+        prefix=settings.api_prefix,
+        dependencies=api_key_dep,
+    )
+    app.include_router(
+        search_router,
         prefix=settings.api_prefix,
         dependencies=api_key_dep,
     )
@@ -164,12 +176,19 @@ def create_app() -> FastAPI:
             JSON error response
         """
         logger.error(f"Validation error: {exc.errors()}")
+        safe_detail: list[dict] = []
+        for err in exc.errors():
+            item = {k: v for k, v in err.items() if k != "ctx"}
+            ctx = err.get("ctx")
+            if ctx:
+                item["ctx"] = {k: str(v) for k, v in ctx.items()}
+            safe_detail.append(item)
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             content=ErrorResponse(
                 error="ValidationError",
                 message="Request validation failed",
-                detail=exc.errors()
+                detail=safe_detail,
             ).model_dump(mode="json")
         )
 

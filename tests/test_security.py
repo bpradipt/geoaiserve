@@ -43,14 +43,18 @@ class TestApiKeyRequired:
     """Tests with api_key_required=True."""
 
     def test_missing_key_returns_401(self) -> None:
-        with _override_settings(api_key_required=True, api_keys=[VALID_KEY, VALID_KEY_2]):
+        with _override_settings(
+            api_key_required=True, api_keys=f"{VALID_KEY},{VALID_KEY_2}"
+        ):
             client = TestClient(_make_app())
             response = client.get("/api/v1/health")
         assert response.status_code == 401
         assert "API key" in response.json()["detail"]
 
     def test_invalid_key_returns_401(self) -> None:
-        with _override_settings(api_key_required=True, api_keys=[VALID_KEY, VALID_KEY_2]):
+        with _override_settings(
+            api_key_required=True, api_keys=f"{VALID_KEY},{VALID_KEY_2}"
+        ):
             client = TestClient(_make_app())
             response = client.get(
                 "/api/v1/health",
@@ -60,7 +64,9 @@ class TestApiKeyRequired:
         assert "API key" in response.json()["detail"]
 
     def test_valid_key_returns_200(self) -> None:
-        with _override_settings(api_key_required=True, api_keys=[VALID_KEY, VALID_KEY_2]):
+        with _override_settings(
+            api_key_required=True, api_keys=f"{VALID_KEY},{VALID_KEY_2}"
+        ):
             client = TestClient(_make_app())
             response = client.get(
                 "/api/v1/health",
@@ -69,7 +75,9 @@ class TestApiKeyRequired:
         assert response.status_code == 200
 
     def test_second_valid_key_returns_200(self) -> None:
-        with _override_settings(api_key_required=True, api_keys=[VALID_KEY, VALID_KEY_2]):
+        with _override_settings(
+            api_key_required=True, api_keys=f"{VALID_KEY},{VALID_KEY_2}"
+        ):
             client = TestClient(_make_app())
             response = client.get(
                 "/api/v1/health",
@@ -100,7 +108,7 @@ class TestCorsValidation:
     def test_credentials_with_wildcard_origins_corrected(self, caplog) -> None:
         """credentials=True + origins=['*'] should log a warning and set credentials=False."""
         with caplog.at_level(logging.WARNING):
-            with _override_settings():  # defaults: cors_credentials=True, cors_origins=["*"]
+            with _override_settings():  # defaults: cors_credentials=True, cors_origins="*"
                 app = _make_app()
                 client = TestClient(app)
 
