@@ -89,3 +89,57 @@ def test_search_validation_requires_target(client: TestClient, uploaded_file_id:
         json={"source_file_id": uploaded_file_id},
     )
     assert r.status_code == 422
+
+
+def test_search_image_chat_mock(client: TestClient, sample_image: BytesIO) -> None:
+    sample_image.seek(0)
+    up = client.post(
+        "/api/v1/files/upload",
+        files={"file": ("chat.png", sample_image, "image/png")},
+    )
+    assert up.status_code == 200
+    fid = up.json()["file_id"]
+
+    resp = client.post(
+        "/api/v1/search/",
+        json={
+            "operation": "image_chat",
+            "source_file_id": fid,
+            "chat_message": "What do you see?",
+        },
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["success"] is True
+    assert data["clearSelections"] is False
+    assert isinstance(data.get("response"), str) and data["response"]
+    assert isinstance(data.get("selections"), list) and len(data["selections"]) > 0
+    sel0 = data["selections"][0]
+    assert "x" in sel0 and "y" in sel0 and "width" in sel0 and "height" in sel0
+
+
+def test_search_image_chat_requires_message(client: TestClient, uploaded_file_id: str) -> None:
+    r = client.post(
+        "/api/v1/search/",
+        json={
+            "operation": "image_chat",
+            "source_file_id": uploaded_file_id,
+        },
+    )
+    assert r.status_code == 422
+
+
+def test_search_image_chat_clear_selections(client: TestClient, uploaded_file_id: str) -> None:
+    resp = client.post(
+        "/api/v1/search/",
+        json={
+            "operation": "image_chat",
+            "source_file_id": uploaded_file_id,
+            "chat_message": "clear all highlights",
+        },
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["success"] is True
+    assert data["clearSelections"] is True
+    assert data["selections"] == []

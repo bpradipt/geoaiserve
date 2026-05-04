@@ -9,6 +9,9 @@ from pydantic import BaseModel, Field, model_validator
 from .common import ModelConfig
 
 
+SearchOperation = Literal["template_search", "image_chat"]
+
+
 class SourceRoiPct(BaseModel):
     """Source region of interest in percent of image (0–100), matching spatialint-ui area mode."""
 
@@ -43,6 +46,21 @@ class SearchOptions(BaseModel):
 class SearchRequest(BaseModel):
     """Unified search request (decoupled from frontend filenames)."""
 
+    operation: SearchOperation = Field(
+        default="template_search",
+        description=(
+            "template_search: DINOv3 template match (requires target file id(s)). "
+            "image_chat: vision-language chat about source_file_id (spatialint-ui mock-compatible)."
+        ),
+    )
+    chat_message: str | None = Field(
+        None,
+        description="User message for operation=image_chat (required for that mode).",
+    )
+    conversation_history: list[dict[str, Any]] | None = Field(
+        None,
+        description="Optional prior turns for image_chat (reserved; Moondream uses current message).",
+    )
     source_file_id: str = Field(..., min_length=1)
     target_file_id: str | None = Field(
         None,
@@ -79,6 +97,10 @@ class SearchRequest(BaseModel):
 
     @model_validator(mode="after")
     def _one_target_mode(self) -> SearchRequest:
+        if self.operation == "image_chat":
+            if self.chat_message is None or not str(self.chat_message).strip():
+                raise ValueError("chat_message is required when operation is image_chat")
+            return self
         has_single = self.target_file_id is not None and self.target_file_id != ""
         has_multi = self.target_file_ids is not None and len(self.target_file_ids) > 0
         if has_single and has_multi:
@@ -130,6 +152,17 @@ class SearchResponse(BaseModel):
     strategy_used: str
     source_file_id: str
     mode: Literal["single", "multiple"]
+    # Image chat (spatialint-ui /mock parity); omitted for template_search
+    success: bool | None = None
+    response: str | None = Field(
+        None,
+        description="Assistant reply when operation was image_chat",
+    )
+    selections: list[dict[str, Any]] | None = Field(
+        None,
+        description="Overlay boxes in percent 0–100: x, y, width, height, label",
+    )
+    clearSelections: bool | None = None
     # Mock-compatible single-target fields (percent boxes, confidence 0–100)
     totalMatches: int | None = None
     avgConfidence: int | None = None

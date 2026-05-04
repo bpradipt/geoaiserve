@@ -322,6 +322,175 @@ def _geotiff_warnings(src_path: Path, tgt_path: Path) -> list[str]:
     return warnings
 
 
+def _extract_detection_objects(detections: Any) -> list[dict[str, Any]]:
+    """Normalize Moondream detect output to a list of dicts with bbox + label."""
+    if detections is None:
+        return []
+    if isinstance(detections, list):
+        return [x for x in detections if isinstance(x, dict)]
+    if isinstance(detections, dict):
+        objs = detections.get("objects")
+        if isinstance(objs, list):
+            return [x for x in objs if isinstance(x, dict)]
+    return []
+
+
+def _bbox_to_selection_pct(
+    bbox: list[float] | tuple[float, ...],
+    iw: int,
+    ih: int,
+    label: str,
+) -> dict[str, Any] | None:
+    if len(bbox) < 4:
+        return None
+    x1, y1, x2, y2 = (float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3]))
+    if max(x1, y1, x2, y2) <= 1.0 + 1e-6:
+        x1, x2 = x1 * iw, x2 * iw
+        y1, y2 = y1 * ih, y2 * ih
+    x1, y1 = max(0.0, x1), max(0.0, y1)
+    x2, y2 = min(float(iw), x2), min(float(ih), y2)
+    if x2 <= x1 or y2 <= y1:
+        return None
+    w, h = x2 - x1, y2 - y1
+    return {
+        "x": 100.0 * x1 / iw,
+        "y": 100.0 * y1 / ih,
+        "width": 100.0 * w / iw,
+        "height": 100.0 * h / ih,
+        "label": label,
+    }
+
+
+def _fallback_chat_selections(message_lower: str) -> list[dict[str, Any]]:
+    """Percent boxes aligned with spatialint-ui mock heuristics when detect is empty."""
+    if "count" in message_lower or "how many" in message_lower:
+        return [
+            {"x": 15, "y": 20, "width": 18, "height": 15, "label": "Object 1"},
+            {"x": 40, "y": 25, "width": 20, "height": 18, "label": "Object 2"},
+            {"x": 65, "y": 45, "width": 19, "height": 16, "label": "Object 3"},
+            {"x": 30, "y": 65, "width": 22, "height": 17, "label": "Object 4"},
+        ]
+    if "describe" in message_lower or "scene" in message_lower:
+        return [
+            {"x": 35, "y": 30, "width": 30, "height": 35, "label": "Primary Focus"},
+            {"x": 10, "y": 60, "width": 20, "height": 18, "label": "Supporting Element 1"},
+            {"x": 70, "y": 55, "width": 22, "height": 20, "label": "Supporting Element 2"},
+        ]
+    if "what" in message_lower or "see" in message_lower:
+        return [
+            {"x": 20, "y": 15, "width": 30, "height": 25, "label": "Main Subject"},
+            {"x": 60, "y": 40, "width": 25, "height": 20, "label": "Secondary Element"},
+        ]
+    return [
+        {"x": 25, "y": 30, "width": 35, "height": 30, "label": "Area of Interest"},
+    ]
+
+
+def _detections_to_chat_selections(
+    detections_raw: Any,
+    iw: int,
+    ih: int,
+    default_label: str,
+) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for obj in _extract_detection_objects(detections_raw):
+        bbox = obj.get("bbox")
+        if not bbox:
+            continue
+        label = str(obj.get("label") or default_label)
+        sel = _bbox_to_selection_pct(bbox, iw, ih, label)
+        if sel:
+            out.append(sel)
+    return out
+
+
+def run_image_chat(req: SearchRequest) -> SearchResponse:
+    """Vision-language chat about one image; response matches spatialint-ui mock /api/chat."""
+    msg = (req.chat_message or "").strip()
+    lower = msg.lower()
+
+    src_path = file_handler.get_file_by_id(req.source_file_id)
+    _, iw, ih, load_warnings = load_rgb_pil(src_path)
+
+    clear_phrases = (
+        "clear selection",
+        "remove selection",
+        "clear highlight",
+        "clear highlights",
+    )
+    clear_intent = any(p in lower for p in clear_phrases) or (
+        ("clear" in lower or "remove" in lower)
+        and ("highlight" in lower or "selection" in lower)
+    )
+    if clear_intent:
+        return SearchResponse(
+            status="success",
+            strategy_used="image_chat_rules",
+            source_file_id=req.source_file_id,
+            mode="single",
+            success=True,
+            response="I've cleared all the highlighted selections from the image.",
+            selections=[],
+            clearSelections=True,
+            totalMatches=0,
+            avgConfidence=0,
+            searchTime=0,
+            matches=[],
+            targets=[],
+            warnings=load_warnings,
+        )
+
+    moondream = registry.get_model(
+        model_type=ModelType.MOONDREAM,
+        model_name=req.model_params.model_name,
+        device=req.model_params.device,
+    )
+    q_result = moondream.query(image=src_path, question=msg)
+    answer_text = str(q_result.get("answer", "")).strip() or (
+        "I could not generate a detailed answer for this image."
+    )
+
+    object_type = "object"
+    if "person" in lower or "people" in lower:
+        object_type = "person"
+    elif "car" in lower or "vehicle" in lower:
+        object_type = "vehicle"
+    elif "building" in lower or "structure" in lower:
+        object_type = "building"
+    elif "tree" in lower or "vegetation" in lower:
+        object_type = "tree"
+
+    selections: list[dict[str, Any]] = []
+    detect_warnings: list[str] = []
+    try:
+        d_result = moondream.detect(image=src_path, object_type=object_type)
+        raw_dets = d_result.get("detections")
+        selections = _detections_to_chat_selections(raw_dets, iw, ih, object_type)
+    except Exception as exc:
+        logger.debug("Moondream detect skipped/failed in image_chat: %s", exc)
+        detect_warnings.append(f"detection_skipped: {exc}")
+
+    if not selections:
+        selections = _fallback_chat_selections(lower)
+
+    return SearchResponse(
+        status="success",
+        strategy_used="moondream_image_chat_v1",
+        source_file_id=req.source_file_id,
+        mode="single",
+        success=True,
+        response=answer_text,
+        selections=selections,
+        clearSelections=False,
+        totalMatches=0,
+        avgConfidence=0,
+        searchTime=0,
+        matches=[],
+        targets=[],
+        warnings=load_warnings + detect_warnings,
+    )
+
+
 def run_search(req: SearchRequest) -> SearchResponse:
     """Execute search across one or many targets."""
     t0 = time.perf_counter()
